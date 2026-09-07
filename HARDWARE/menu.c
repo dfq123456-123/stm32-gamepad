@@ -2,55 +2,88 @@
  * menu.c - 双模式菜单系统 + 测试手柄界面
  *
  * 状态机: CLOSED -> OPEN(列表) -> TEST(测试手柄界面)
- * 导航: 十字键/左摇杆 上下移光标; 十字键左右调参或进测试(游戏模式 idx2); 返回仅 HOME(中间三键左侧)
+ * 导航: 十字键/左摇杆 上下移光标; 十字键左右调参或进测试(游戏模式 idx5); 返回仅 HOME(中间三键左侧)
  *
- * 游戏模式菜单: 死区 / 滤波 / 测试手柄
+ * 游戏模式菜单: 死区 / 滤波 / 亮度 / 关屏 / 测试手柄
  * 蓝牙模式菜单: 包头 / 包尾 / 十六进制 / 换行
+ *
+ * 参数断电保存: 修改任意可调项后写入 Flash 最后一页, 开机自动读取; 无效时回默认。
  ******************************************************************************/
 #include "menu.h"
 #include "joystick.h"
 #include "adc.h"
 #include "oled.h"
+#include "flash_save.h"
 #include <string.h>
 
 /*---------------------- 全局状态 ----------------------*/
 static uint8_t    mode = MODE_GAME;
 static BT_CONFIG  bt_cfg = { 0xAA, 0x55, 0, 1 };   /* 默认: 包头AA 包尾55 无hex 有换行 */
 
-/* 亮度 / 空闲熄屏 / 连发(Turbo) 状态(可被菜单修改) */
+/* 亮度 / 空闲熄屏 状态(可被菜单修改 + 断电保存) */
 static uint8_t oled_brightness = 0xFF;   /* 当前 OLED 对比度(默认最亮) */
-static uint8_t idle_idx        = 0;      /* 空闲熄屏选项: 0=关 1=5s 2=10s 3=30s */
-static uint8_t turbo_key_idx   = 0;      /* 连发目标键索引(见 turbo_keys) */
-static uint8_t turbo_hz_idx    = 2;      /* 连发频率索引(见 turbo_hz, 默认 8Hz) */
+static uint8_t idle_idx        = 1;      /* 空闲熄屏选项: 0=关 1=3s 2=5s 3=10s 4=30s(默认 1=3s) */
 
-/* 连发可选键(排除走 Hat 的十字键 UP/DOWN/LEFT/RIGHT, 它们不在 HID 报告位内): 0=关 */
-static const uint8_t turbo_keys[] =
-{
-    0, KEY_A, KEY_B, KEY_X, KEY_Y, KEY_LB, KEY_RB, KEY_L3, KEY_R3, KEY_HOME, KEY_MENU, KEY_VIEW
-};
-/* 连发频率选项(Hz) */
-static const uint8_t turbo_hz[] = { 2, 4, 8, 16 };
 /* 空闲熄屏秒数(对应 idle_idx) */
-static const uint8_t idle_secs[] = { 0, 5, 10, 30 };
+static const uint8_t idle_secs[] = { 0, 3, 5, 10, 30 };
 
-/* 连发键英文短名(键号 -> 字符串) */
-static const char *turbo_key_name(uint8_t key_id)
+/*---------------------- 参数保存到 Flash ----------------------*/
+static uint8_t menu_dirty_for_save = 0;  /* 1=有参数改动待保存(延时写入避免频繁擦写) */
+static uint8_t save_delay_cnt = 0;        /* 延时计数: 改动后等若干帧再写(批量合并) */
+
+/* 把当前所有可调参数打包成 PARAMS 结构 */
+static void pack_params(PARAMS *p)
 {
-    switch (key_id)
+    p->version      = PARAM_VERSION;
+    p->deadzone     = (uint8_t)Joystick_GetDeadzone();
+    p->filter       = (uint8_t)Joystick_GetFilter();
+    p->brightness   = oled_brightness;
+    p->idle_idx     = idle_idx;
+    p->mode         = (uint8_t)mode;
+    p->bt_header    = bt_cfg.header;
+    p->bt_tail      = bt_cfg.tail;
+    p->bt_use_hex   = bt_cfg.use_hex;
+    p->bt_use_newline = bt_cfg.use_newline;
+}
+
+/* 从 PARAMS 结构恢复所有参数到运行时状态 */
+static void unpack_params(const PARAMS *p)
+{
+    Joystick_SetDeadzone(p->deadzone);
+    Joystick_SetFilter(p->filter);
+    oled_brightness = p->brightness;  OLED_SetContrast(oled_brightness);
+    idle_idx        = p->idle_idx;
+    mode            = (p->mode == MODE_BT) ? MODE_BT : MODE_GAME;
+    bt_cfg.header       = p->bt_header;
+    bt_cfg.tail         = p->bt_tail;
+    bt_cfg.use_hex      = p->bt_use_hex;
+    bt_cfg.use_newline  = p->bt_use_newline;
+}
+
+/* 标记参数已改动, 延时保存(避免连续按键时每帧都擦写 Flash) */
+static void mark_param_changed(void)
+{
+    menu_dirty_for_save = 1;
+    save_delay_cnt = 0;
+}
+
+/* 在 Menu_Tick 末尾调用: 若有待保存且已过延时, 写入 Flash */
+static void save_if_pending(void)
+{
+    if (!menu_dirty_for_save) return;
+
+    /* 等待 100 帧(~1s) 无新改动再写, 避免用户调参时频繁擦写 */
+    if (save_delay_cnt < 100)
     {
-        case KEY_A:    return "A";
-        case KEY_B:    return "B";
-        case KEY_X:    return "X";
-        case KEY_Y:    return "Y";
-        case KEY_LB:   return "LB";
-        case KEY_RB:   return "RB";
-        case KEY_L3:   return "L3";
-        case KEY_R3:   return "R3";
-        case KEY_HOME: return "HOME";
-        case KEY_MENU: return "MENU";
-        case KEY_VIEW: return "VIEW";
-        default:       return "";
+        save_delay_cnt++;
+        return;
     }
+
+    PARAMS p;
+    pack_params(&p);
+    FlashSave_Save(&p);
+    menu_dirty_for_save = 0;
+    save_delay_cnt = 0;
 }
 
 /* 左摇杆控制菜单光标的边沿状态 */
@@ -82,6 +115,7 @@ typedef enum
 } MENU_STATE;
 
 static uint8_t menu_state = MENU_CLOSED;
+static uint8_t test_from_boot = 0;  /* 测试界面来源: 1=开机自动进入(返回→显示模式), 0=菜单进入(返回→菜单列表) */
 static uint8_t menu_idx   = 0;      /* 当前菜单项索引 */
 static uint16_t menu_dirty = 0;     /* 需要重绘标志 */
 
@@ -119,8 +153,8 @@ static char *u2hex(uint8_t val, char *buf)
 /*---------------------- 菜单项数量/取值/设置 ----------------------*/
 static uint8_t item_count(void)
 {
-    /* 游戏模式 7 项(死区/滤波/亮度/关屏/连发键/连发速/测试手柄); 蓝牙模式 4 项 */
-    return (mode == MODE_GAME) ? 7 : 4;
+    /* 游戏模式 5 项(死区/滤波/亮度/关屏/测试手柄); 蓝牙模式 4 项 */
+    return (mode == MODE_GAME) ? 5 : 4;
 }
 
 static uint16_t item_get(uint8_t idx)
@@ -131,9 +165,7 @@ static uint16_t item_get(uint8_t idx)
         if (idx == 1) return Joystick_GetFilter();
         if (idx == 2) return oled_brightness;
         if (idx == 3) return idle_idx;
-        if (idx == 4) return turbo_key_idx;
-        if (idx == 5) return turbo_hz_idx;
-        /* idx==6 是"测试手柄"动作项, 无取值 */
+        /* idx==4 是"测试手柄"动作项, 无取值 */
     }
     else
     {
@@ -149,19 +181,17 @@ static void item_set(uint8_t idx, uint16_t val)
 {
     if (mode == MODE_GAME)
     {
-        if (idx == 0) Joystick_SetDeadzone(val);
-        if (idx == 1) Joystick_SetFilter((uint8_t)val);
-        if (idx == 2) { oled_brightness = (uint8_t)val; OLED_SetContrast(oled_brightness); }
-        if (idx == 3) { idle_idx = (uint8_t)val; }
-        if (idx == 4) { turbo_key_idx = (uint8_t)val; Joystick_SetTurboKey(turbo_keys[turbo_key_idx]); }
-        if (idx == 5) { turbo_hz_idx  = (uint8_t)val; Joystick_SetTurboHz(turbo_hz[turbo_hz_idx]); }
+        if (idx == 0) { Joystick_SetDeadzone(val);      mark_param_changed(); }
+        if (idx == 1) { Joystick_SetFilter((uint8_t)val); mark_param_changed(); }
+        if (idx == 2) { oled_brightness = (uint8_t)val; OLED_SetContrast(oled_brightness); mark_param_changed(); }
+        if (idx == 3) { idle_idx = (uint8_t)val;        mark_param_changed(); }
     }
     else
     {
-        if (idx == 0) bt_cfg.header = (uint8_t)val;
-        if (idx == 1) bt_cfg.tail   = (uint8_t)val;
-        if (idx == 2) bt_cfg.use_hex = (uint8_t)(val & 1);
-        if (idx == 3) bt_cfg.use_newline = (uint8_t)(val & 1);
+        if (idx == 0) { bt_cfg.header = (uint8_t)val;       mark_param_changed(); }
+        if (idx == 1) { bt_cfg.tail   = (uint8_t)val;       mark_param_changed(); }
+        if (idx == 2) { bt_cfg.use_hex = (uint8_t)(val & 1); mark_param_changed(); }
+        if (idx == 3) { bt_cfg.use_newline = (uint8_t)(val & 1); mark_param_changed(); }
     }
 }
 
@@ -174,8 +204,6 @@ static void item_range(uint8_t idx, uint16_t *min, uint16_t *max, uint16_t *step
         if (idx == 1) { *min = 0; *max = 8;   *step = 1;  }   /* 滤波 */
         if (idx == 2) { *min = 0; *max = 255; *step = 16; }   /* 亮度(对比度) */
         if (idx == 3) { *min = 0; *max = (uint16_t)(sizeof(idle_secs)/sizeof(idle_secs[0]) - 1); *step = 1; } /* 熄屏 */
-        if (idx == 4) { *min = 0; *max = (uint16_t)(sizeof(turbo_keys)/sizeof(turbo_keys[0]) - 1); *step = 1; } /* 连发键 */
-        if (idx == 5) { *min = 0; *max = (uint16_t)(sizeof(turbo_hz)/sizeof(turbo_hz[0]) - 1); *step = 1; } /* 连发速 */
     }
     else
     {
@@ -254,31 +282,7 @@ static void draw_item(uint8_t line, uint8_t idx, uint8_t selected)
                 OLED_ShowString(x, line, buf);
             }
         }
-        else if (idx == 4)   /* 连发键 */
-        {
-            OLED_ShowCN(x, line, CN_LIAN); x += 16;
-            OLED_ShowCN(x, line, CN_FA);   x += 16;
-            if (v == 0)
-            {
-                OLED_ShowCN(x, line, CN_GUAN);
-            }
-            else
-            {
-                OLED_ShowString(x, line, turbo_key_name(turbo_keys[v]));
-            }
-        }
-        else if (idx == 5)   /* 连发速度 */
-        {
-            OLED_ShowCN(x, line, CN_SU); x += 16;
-            {
-                uint8_t hz = turbo_hz[v];
-                buf[0] = (char)('0' + (hz / 10));
-                buf[1] = (char)('0' + (hz % 10));
-                buf[2] = 'H'; buf[3] = 'z'; buf[4] = 0;
-                OLED_ShowString(x, line, buf);
-            }
-        }
-        else            /* idx==6: 测试手柄(动作项, 英文标签避免扩充中文字库) */
+        else            /* idx==4: 测试手柄(动作项, 英文标签避免扩充中文字库) */
         {
             OLED_ShowString(x, line, "TEST");
         }
@@ -324,6 +328,9 @@ static void menu_draw(void)
 
     OLED_Clear();
 
+    /* 第 0 行: 标题"菜单"(左上角) */
+    OLED_ShowCN(0, 0, CN_CAI);   /* 菜 */
+    OLED_ShowCN(16, 0, CN_DAN);  /* 单 */
 
     /* 滚动窗口: 保证 menu_idx 在可见的 3 行内 */
     scroll = 0;
@@ -508,7 +515,14 @@ static void test_draw(void)
 /*---------------------- 初始化 ----------------------*/
 void Menu_Init(void)
 {
-    mode = MODE_GAME;
+    /* 从 Flash 读取保存的参数; 无效(首次上电/版本不符/损坏)则保持默认值 */
+    PARAMS p;
+    if (FlashSave_Load(&p))
+    {
+        unpack_params(&p);   /* 有效: 恢复所有参数 */
+    }
+    /* mode 已由 unpack_params 设置(若无保存则默认 MODE_GAME) */
+
     menu_state = MENU_CLOSED;
     menu_idx = 0;
     menu_dirty = 1;  /* 设为1让开机首帧显示模式横幅 */
@@ -517,12 +531,26 @@ void Menu_Init(void)
 /*---------------------- 主循环每帧调用 ----------------------*/
 void Menu_Tick(void)
 {
-    /* ===== 0. 测试手柄界面(最高优先: 实时刷新; 中间三键 HOME/左键VIEW/右键MENU 均可返回) ===== */
+    /* ===== 0. 测试手柄界面(最高优先: 实时刷新) =====
+     * 返回目标由进入来源决定:
+     *   开机自动进入(test_from_boot=1): HOME/MENU 退回显示模式界面(MENU_CLOSED)
+     *   菜单中进入 (test_from_boot=0): HOME/MENU 退回菜单列表  (MENU_OPEN)
+     * VIEW 无论从哪进都切模式 + 回显示模式界面(与全局一致) */
     if (menu_state == MENU_TEST)
     {
-        if (Joystick_KeyPressed(KEY_HOME) || Joystick_KeyPressed(KEY_VIEW) || Joystick_KeyPressed(KEY_MENU))
+        if (Joystick_KeyPressed(KEY_HOME) || Joystick_KeyPressed(KEY_MENU))
         {
-            menu_state = MENU_OPEN;     /* 返回菜单列表(仅退出测试, 不切模式) */
+            menu_state = test_from_boot ? MENU_CLOSED : MENU_OPEN;
+            test_from_boot = 0;   /* 用完即清, 下次进测试由进入路径重新设置 */
+            menu_dirty = 1;
+        }
+        else if (Joystick_KeyPressed(KEY_VIEW))
+        {
+            mode = (mode == MODE_GAME) ? MODE_BT : MODE_GAME;
+            menu_state = MENU_CLOSED;
+            menu_idx = 0;
+            test_from_boot = 0;
+            mark_param_changed();   /* 模式切换也保存 */
             menu_dirty = 1;
         }
         else
@@ -538,6 +566,7 @@ void Menu_Tick(void)
         mode = (mode == MODE_GAME) ? MODE_BT : MODE_GAME;
         menu_state = MENU_CLOSED;   /* 切模式时退出菜单, 显示横幅 */
         menu_idx = 0;
+        mark_param_changed();      /* 模式切换也保存 */
         menu_dirty = 1;
     }
     else if (Joystick_KeyPressed(KEY_MENU))            /* PB4: 打开/关闭菜单 */
@@ -598,10 +627,10 @@ void Menu_Tick(void)
             menu_dirty = 1;
         }
 
-        /* 3c. 十字键左右: 参数项直接调参; "测试手柄"项(游戏模式 idx6)左右即进入测试 */
+        /* 3c. 十字键左右: 参数项直接调参; "测试手柄"项(游戏模式 idx4)左右即进入测试 */
         if (Joystick_KeyPressed(KEY_LEFT) || Joystick_KeyPressed(KEY_RIGHT))
         {
-            if (mode == MODE_GAME && menu_idx == 6)
+            if (mode == MODE_GAME && menu_idx == 4)
             {
                 test_enter();
                 menu_state = MENU_TEST;
@@ -611,7 +640,7 @@ void Menu_Tick(void)
             menu_dirty = 1;
         }
 
-        /* 3d/3e. 不再使用右侧 A/B 键: 进入测试由左右键(idx2)触发, 返回仅 HOME */
+        /* 3d/3e. 不再使用右侧 A/B 键: 进入测试由左右键触发, 返回仅 HOME */
     }
 
     /* ===== 5. 重绘 ===== */
@@ -627,6 +656,9 @@ void Menu_Tick(void)
             menu_draw();
         }
     }
+
+    /* ===== 6. 延时保存参数到 Flash(有改动且静默 1s 后写入) ===== */
+    save_if_pending();
 }
 
 /*---------------------- 访问接口 ----------------------*/
@@ -645,6 +677,7 @@ BT_CONFIG *Menu_GetBTConfig(void)
  ******************************************************************************/
 void Menu_EnterTest(void)
 {
+    test_from_boot = 1;   /* 标记来源=开机, 退出测试时回显示模式界面 */
     menu_state = MENU_TEST;
     menu_dirty = 0;   /* 测试界面走每帧 test_draw 实时刷新, 不依赖 dirty */
 }
