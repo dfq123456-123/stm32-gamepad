@@ -214,11 +214,18 @@ void Joystick_Scan(void)
     /* 3. 滤波 + 死区处理 */
     for (ch = 0; ch < ADC_CH_NUM; ch++)
     {
-        uint16_t f = lowpass(joy_val[ch], joy_raw[ch], joy_filter);  /* 固定滤波强度(菜单可调) */
+        /* 滤波强度自适应: 用 raw 与 joy_val 的差距(而非帧间 raw 差)判断是否在移动。
+         * 旧逻辑用帧间 raw 差: 推到位停住后 rdelta=0 → 切重滤波 → joy_val 要 10+ 帧才追上, 延迟严重。
+         * 新逻辑用 vdelta=raw-joy_val: 差距大=还没追上=在移动 → 轻/不滤波; 差距小=已追上=静止 → 重滤波。 */
+        int32_t  vdelta = (int32_t)joy_raw[ch] - (int32_t)joy_val[ch];
+        uint8_t  fn = (vdelta > 64 || vdelta < -64) ? 0u :   /* 大幅移动: 无滤波, 立即跟随(raw 直通) */
+                     (vdelta > 12 || vdelta < -12) ? 1u :     /* 小幅移动: 轻滤波(跟手) */
+                     joy_filter;                              /* 静止: 重滤波去抖 */
+        uint16_t f = lowpass(joy_val[ch], joy_raw[ch], fn);
         int16_t diff = (int16_t)f - (int16_t)joy_center[ch];
 
         /* 死区归零: |Δ| < 死区 → 强制回中心(摇杆轴) */
-        if (ch < ADC_CH_NUM && diff > -((int16_t)joy_deadzone) && diff < (int16_t)joy_deadzone)
+        if (diff > -((int16_t)joy_deadzone) && diff < (int16_t)joy_deadzone)
         {
             /* 摇杆 4 轴做死区; 扳机 2 轴(通道4/5)也做死区归零, 保持静止差动=0 */
             f = joy_center[ch];
@@ -424,13 +431,12 @@ void Joystick_GetHIDReport(uint8_t *buf)
     }
     buf[2] = dpad;
 
-    /* 3. 摇杆轴(128 中心): 用 AXIS_CH 交叉映射(与测试界面一致) + 自适应量程, 满推必到 ±127
-     *    摇杆模块 90° 旋转: 逻辑 X(横)<-物理 VRY, 逻辑 Y(纵)<-物理 VRX */
-    buf[3] = axis_to_hid(AXIS_CH_LX);  /* 摇杆1X(逻辑X = 物理VRY) */
-    buf[4] = axis_to_hid(AXIS_CH_LY);  /* 摇杆1Y(逻辑Y = 物理VRX) */
-    buf[6] = axis_to_hid(AXIS_CH_RX);  /* 摇杆2X(逻辑X = 物理VRY) */
+    /* 3. 摇杆轴(128 中心): 用 AXIS_CH 映射(与测试界面一致) + 自适应量程, 满推必到 ±127 */
+    buf[3] = axis_to_hid(AXIS_CH_LX);  /* 摇杆1X */
+    buf[4] = axis_to_hid(AXIS_CH_LY);  /* 摇杆1Y */
+    buf[6] = axis_to_hid(AXIS_CH_RX);  /* 摇杆2X */
 
-    /* 摇杆2Y 反向(逻辑Y = 物理VRX): 0x80 - v */
+    /* 摇杆2Y 反向: 0x80 - v (右摇杆 Y 轴物理方向相反) */
     {
         int32_t d = (int32_t)joy_val[AXIS_CH_RY] - (int32_t)joy_center[AXIS_CH_RY];
         int32_t v = d * 127 / joy_half_range(AXIS_CH_RY);
