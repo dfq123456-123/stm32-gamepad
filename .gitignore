@@ -1,0 +1,43 @@
+# ================= Keil MDK 构建产物 =================
+# 输出目录(本项目 Objects/ 约 18MB, 含 .hex/.axf/.o/.d/.crf)
+Objects/
+Listings/
+
+# 构建产物(防止输出路径变更后漏网)
+*.o
+*.d
+*.crf
+*.axf
+*.hex
+*.bin
+*.map
+*.htm
+*.lnp
+*.dep
+*.iex
+*.tra
+*.sim
+*.plg
+*.cod
+*.lst
+*.s19
+*.mot
+
+# ============ Keil 用户/临时文件 ============
+*.uvguix.*        # 窗口布局(含本机用户名与绝对路径)
+JLinkLog.txt      # J-Link 日志
+build_log.txt     # UV4 命令行编译日志
+*.bak
+*.tmp
+*~
+
+# ============ 编辑器 / 系统 ============
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 注意: 以下必须提交(保证 clone 后可编译)
+#   demo.uvprojx / demo.uvoptx  工程文件
+#   *.sct                       分散加载描述
+#   CORE/ HARDWARE/ USB/ USER/ RTE/ Libraries/  源码与固件库
