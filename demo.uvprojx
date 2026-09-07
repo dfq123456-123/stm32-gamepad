@@ -449,6 +449,11 @@
               <FilePath>D:\stm32\project\手柄\HARDWARE\menu.c</FilePath>
             </File>
             <File>
+              <FileName>flash_save.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>D:\stm32\project\手柄\HARDWARE\flash_save.c</FilePath>
+            </File>
+            <File>
               <FileName>boot_splash.c</FileName>
               <FileType>1</FileType>
               <FilePath>D:\stm32\project\手柄\HARDWARE\boot_splash.c</FilePath>
