@@ -21,7 +21,7 @@
 #define __JOYSTICK_H
 
 #include "stm32f10x.h"
-#include "adc.h"   /* ADC_CH_* 通道定义: AXIS_CH 交叉映射依赖之 */
+#include "adc.h"   /* ADC_CH_* 通道定义: AXIS_CH 轴映射依赖之 */
 
 /* 校准进度回调: percent=0~100, 由 Joystick_Calibrate_Ex 每完成若干样本调用一次 */
 typedef void (*Joystick_CalProgressCB)(uint8_t percent);
@@ -54,11 +54,13 @@ typedef void (*Joystick_CalProgressCB)(uint8_t percent);
 
 #define KEY_NUM     15
 
-/*---------------------- 摇杆逻辑轴交叉映射(90°旋转修正, 单一事实来源) ----------------------*/
-/* 实测板子上摇杆模块与电位器轴存在 90° 错位: 物理 VRX 对应手持"上下", VRY 对应"左右"。
- * 故逻辑轴需与物理通道交叉, 否则 PC/屏幕上的 X/Y 会反。测试界面与 HID 报告必须共用本映射。
- *   逻辑 X(横) <- 物理 VRY,   逻辑 Y(纵) <- 物理 VRX
- * 该方向已由用户实测确认正确, 不提供交换开关。 */
+/*---------------------- 摇杆逻辑轴映射(单一事实来源, 屏幕与 HID 共用) ----------------------*/
+/* 实物接线(2026-09-07 二次实测): 左摇杆接 PA0/PA1, 右摇杆接 PA2/PA3 —— 与 adc.h 的 L/R 标签一致。
+ * 但摇杆模块在 PCB 上的安装方向使 VRX/VRY 与手持方向交叉:
+ *   手持横向 X 实际由 PA1/PA3 响应, 手持纵向 Y 由 PA0/PA2 响应。
+ * 故逻辑轴需在 VRX/VRY 间交叉, 但不交换 L/R。
+ *   逻辑左X <- PA1 (L_VRY)   逻辑左Y <- PA0 (L_VRX)
+ *   逻辑右X <- PA3 (R_VRY)   逻辑右Y <- PA2 (R_VRX) */
 #define AXIS_CH_LX      ADC_CH_L_VRY
 #define AXIS_CH_LY      ADC_CH_L_VRX
 #define AXIS_CH_RX      ADC_CH_R_VRY
@@ -83,7 +85,7 @@ void Joystick_Scan(void);
  *   [2] 方向键 dpad(0~8)
  *   [3] 摇杆1X(128中心) [4] 摇杆1Y(128中心) [5] 差动比例(5~250)
  *   [6] 摇杆2X(128中心) [7] 摇杆2Y(128中心,反向)
- *   注: 摇杆 X/Y 经 AXIS_CH 交叉映射(模块90°旋转修正), 与"测试手柄"界面一致 */
+ *   注: 摇杆 X/Y 经 AXIS_CH 映射, 与"测试手柄"界面一致 */
 void Joystick_GetHIDReport(uint8_t *buf);
 
 /* 读取按键当前电平(1=按下) */

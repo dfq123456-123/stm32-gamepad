@@ -449,11 +449,12 @@ static void test_draw(void)
     hx = (int16_t)(lw / 2 - 4);   /* 20 */
     hy = (int16_t)(lh / 2 - 4);   /* 19 */
 
-    /* 采集: 实时无延迟(原始归一化 GetNormRaw, 不经低通); 屏幕与 HID 共用 AXIS_CH(不单独对调, 保持左右一致) */
-    nlx = Joystick_GetNormRaw(AXIS_CH_LX);
-    nly = Joystick_GetNormRaw(AXIS_CH_LY);
-    nrx = Joystick_GetNormRaw(AXIS_CH_RX);
-    nry = Joystick_GetNormRaw(AXIS_CH_RY);
+    /* 采集: 用滤波后归一化 GetNorm(与 HID 同源 joy_val), 自适应滤波移动时 n=1 跟手, 静止 n=3 去抖;
+       屏幕与 HID 共用 AXIS_CH + 同一滤波数据源, 彻底消除相邻 ADC 通道(PA1↔PA2)残余串扰在屏幕上的表现 */
+    nlx = Joystick_GetNorm(AXIS_CH_LX);
+    nly = Joystick_GetNorm(AXIS_CH_LY);
+    nrx = Joystick_GetNorm(AXIS_CH_RX);
+    nry = Joystick_GetNorm(AXIS_CH_RY);
     ntl = Joystick_GetNormAbs(ADC_CH_LT);   /* 0~1024 */
     ntr = Joystick_GetNormAbs(ADC_CH_RT);
 

@@ -30,6 +30,8 @@ Listings/
 JLinkLog.txt
 # UV4 命令行编译日志
 build_log.txt
+# 他人/CI 构建校验日志(非源码)
+build_verify.log
 *.bak
 *.tmp
 *~

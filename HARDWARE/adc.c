@@ -53,19 +53,23 @@ void MY_ADC_Init(void)
  * 参数:   ch = 0~5 (见 adc.h 的 ADC_CH_xxx 宏)
  * 返回:   12bit 原始值 0~4095
  * 说明:   软件单次转换轮询, 与 day11/joystick 的 ADC_GetValue 行为一致
+ *          通道切换后先做一次"丢弃转换"(dummy), 让采样保持电容充分稳定到新通道
+ *          电压, 再做第二次转换取值, 消除相邻通道串扰(PA1↔PA2 等)。
  ******************************************************************************/
 uint16_t ADC_GetValue(uint8_t ch)
 {
     /* 配置规则组: 通道 ch, 采样顺序 1, 采样时间 239.5 周期 */
     ADC_RegularChannelConfig(ADC1, ch, 1, ADC_SampleTime_239Cycles5);
 
-    /* 软件启动转换 */
+    /* 第 1 次转换: dummy, 冲刷采样保持电容上上一通道的残留电荷 */
     ADC_SoftwareStartConvCmd(ADC1, ENABLE);
+    while (ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC) == RESET);
+    (void)ADC_GetConversionValue(ADC1);          /* 丢弃, 仅为让采样电容充到 ch 真实电压 */
 
-    /* 等待转换完成 */
+    /* 第 2 次转换: 采样电容已稳定, 取此值作为真实结果 */
+    ADC_SoftwareStartConvCmd(ADC1, ENABLE);
     while (ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC) == RESET);
 
-    /* 返回转换结果 */
     return (uint16_t)ADC_GetConversionValue(ADC1);
 }
 
