@@ -82,6 +82,11 @@ static uint16_t crc16(const uint8_t *buf, uint32_t len)
 uint8_t FlashSave_Load(PARAMS *p)
 {
     const uint8_t *base = (const uint8_t *)SAVE_PAGE_ADDR;
+    const uint8_t *src;
+    uint8_t *dst;
+    uint8_t i;
+    uint16_t stored_crc;
+    uint16_t calc_crc;
     uint32_t magic = *(const uint32_t *)base;
     uint8_t  ver   = base[4];
 
@@ -92,17 +97,16 @@ uint8_t FlashSave_Load(PARAMS *p)
     }
 
     /* 拷贝参数体(跳过 magic[0..3] + version[4]) */
-    uint8_t *dst = (uint8_t *)p;
-    const uint8_t *src = base + 5;
-    uint8_t i;
+    dst = (uint8_t *)p;
+    src = base + 5;
     for (i = 0; i < sizeof(PARAMS); i++)
     {
         dst[i] = src[i];
     }
 
     /* 校验 CRC: 覆盖 magic(4) + version(1) + params(sizeof(PARAMS)) */
-    uint16_t stored_crc = *(const uint16_t *)(base + 5 + sizeof(PARAMS));
-    uint16_t calc_crc   = crc16(base, 5 + sizeof(PARAMS));
+    stored_crc = *(const uint16_t *)(base + 5 + sizeof(PARAMS));
+    calc_crc   = crc16(base, 5 + sizeof(PARAMS));
     if (stored_crc != calc_crc)
     {
         return 0;   /* CRC 不符, 数据损坏 */
@@ -145,10 +149,11 @@ uint8_t FlashSave_Save(const PARAMS *p)
     /* 将 raw 字节按半字打包到 buf */
     {
         uint16_t total = 5 + sizeof(PARAMS) + 2;
+        uint16_t lo, hi;
         for (i = 0; i < total; i += 2)
         {
-            uint16_t lo = raw[i];
-            uint16_t hi = (i + 1 < total) ? raw[i + 1] : 0xFF;
+            lo = raw[i];
+            hi = (i + 1 < total) ? raw[i + 1] : 0xFF;
             buf[i / 2] = (uint16_t)(lo | (hi << 8));
         }
     }

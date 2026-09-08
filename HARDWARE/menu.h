@@ -38,5 +38,6 @@ void       Menu_EnterTest(void);         /* 直接进入"测试手柄"界面(开
 uint8_t    Menu_GetMode(void);           /* 返回 DEV_MODE */
 BT_CONFIG *Menu_GetBTConfig(void);       /* 返回蓝牙帧配置指针 */
 uint8_t    Menu_GetIdleTimeout(void);    /* 空闲熄屏秒数: 0=关闭, 否则 5/10/30 */
+void       Menu_ForceRedraw(void);       /* 熄屏唤醒后强制全量重画(清掉残影) */
 
 #endif /* __MENU_H */

@@ -13,12 +13,12 @@
 #include <stdint.h>
 
 /* 参数结构体(断电保存的字段, 改结构时递增 VERSION 让旧数据失效自动回默认) */
-#define PARAM_VERSION  1u
+#define PARAM_VERSION  2u   /* v2: deadzone 由 uint8_t 升 uint16_t, 旧 v1 数据自动失效 */
 
 typedef struct
 {
     uint8_t  version;       /* 结构版本号, 与 PARAM_VERSION 不符视为无效 */
-    uint8_t  deadzone;      /* 摇杆死区 */
+    uint16_t deadzone;      /* 摇杆死区(0~512, 需 uint16 否则 >255 被截断) */
     uint8_t  filter;        /* 滤波强度 */
     uint8_t  brightness;    /* OLED 对比度 */
     uint8_t  idle_idx;      /* 熄屏选项索引(0=关 1=5s 2=10s 3=30s) */

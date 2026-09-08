@@ -71,14 +71,6 @@ static uint16_t joy_deadzone = JOY_DEADZONE_DEFAULT;  /* 死区(可被菜单修�
 static uint8_t  joy_filter  = JOY_FILTER_DEFAULT;     /* 滤波强度(可被菜单修改) */
 static uint8_t  stable_cnt = 0;                       /* 动态校准静止计数 */
 
-/*---------------------- 按键连发(Turbo)状态 ----------------------*/
-/* 选定键按下时, 按频率在"按下/松开"间自动翻转, 模拟快速点按。
- * 仅对映射进 HID 报告位的键有效(十字键走 Hat Switch, report_btn_bit=0xFF 的键不连发)。 */
-static uint8_t  turbo_key   = 0;       /* 连发目标键号(0=关闭) */
-static uint8_t  turbo_hz    = 8;       /* 连发频率 Hz(默认 8) */
-static uint16_t turbo_tick  = 0;       /* 相位计时(ms), 每帧 Joystick_Scan 累加 10 */
-static uint8_t  turbo_on    = 1;       /* 当前连发输出相位(1=在该帧将键断言为按下) */
-
 /*******************************************************************************
  * 初始化: 按键全部上拉输入(按下=低) + ADC1 + 上电自动校准
  ******************************************************************************/
@@ -214,13 +206,16 @@ void Joystick_Scan(void)
     /* 3. 滤波 + 死区处理 */
     for (ch = 0; ch < ADC_CH_NUM; ch++)
     {
-        /* 滤波强度自适应: 用 raw 与 joy_val 的差距(而非帧间 raw 差)判断是否在移动。
-         * 旧逻辑用帧间 raw 差: 推到位停住后 rdelta=0 → 切重滤波 → joy_val 要 10+ 帧才追上, 延迟严重。
-         * 新逻辑用 vdelta=raw-joy_val: 差距大=还没追上=在移动 → 轻/不滤波; 差距小=已追上=静止 → 重滤波。 */
+        /* 滤波强度自适应: 用 raw 与 joy_val 的差距判断是否在移动。
+         * 阈值选取关键: ADC 残余串扰约 20-40 LSB, 必须落入重滤波区被压住;
+         *   真正推杆 raw 偏离 >100, 走轻/无滤波保证跟手。
+         * vdelta>120: 大幅移动, 无滤波(raw 直通, 0 延迟)
+         * vdelta>60:  小幅移动, 轻滤波(跟手)
+         * 其余:        静止 + 串扰残余, 重滤波去抖 */
         int32_t  vdelta = (int32_t)joy_raw[ch] - (int32_t)joy_val[ch];
-        uint8_t  fn = (vdelta > 64 || vdelta < -64) ? 0u :   /* 大幅移动: 无滤波, 立即跟随(raw 直通) */
-                     (vdelta > 12 || vdelta < -12) ? 1u :     /* 小幅移动: 轻滤波(跟手) */
-                     joy_filter;                              /* 静止: 重滤波去抖 */
+        uint8_t  fn = (vdelta > 120 || vdelta < -120) ? 0u :  /* 大幅移动: 无滤波 */
+                     (vdelta > 60  || vdelta < -60)  ? 1u :   /* 小幅移动: 轻滤波 */
+                     joy_filter;                             /* 静止+串扰: 重滤波 */
         uint16_t f = lowpass(joy_val[ch], joy_raw[ch], fn);
         int16_t diff = (int16_t)f - (int16_t)joy_center[ch];
 
@@ -269,24 +264,6 @@ void Joystick_Scan(void)
         {
             btn_bitmap |= (uint16_t)(1u << rb);
         }
-    }
-
-    /* 6. 连发(Turbo)相位推进: 选定键物理按住时, 按 turbo_hz 在按下/松开间翻转。
-     *    一个完整周期 = 1/hz 秒, 高/低各占半周期。未按住则相位复位为"按下"(不连发)。 */
-    if (turbo_key != 0 && Joystick_GetKey(turbo_key))
-    {
-        uint16_t half_ms = (turbo_hz > 0) ? (uint16_t)(500 / turbo_hz) : 250;
-        turbo_tick += 10;   /* 主循环 10ms 一帧 */
-        if (turbo_tick >= half_ms)
-        {
-            turbo_tick = 0;
-            turbo_on   = (uint8_t)(turbo_on ? 0 : 1);
-        }
-    }
-    else
-    {
-        turbo_tick = 0;
-        turbo_on   = 1;     /* 松开: 复位为按下态(物理状态由 btn_bitmap 决定) */
     }
 }
 
@@ -366,25 +343,6 @@ static uint8_t axis_to_hid(uint8_t ch)
 }
 
 /*******************************************************************************
- * 连发(Turbo)相位应用到键位图: 仅对 turbo_key 且当前物理按住的键生效,
- * 按 turbo_on 相位决定该帧是否把键断言为按下(其余键保持物理状态)。
- * 十字键(report_btn_bit=0xFF)不在报告位内, 自然不连发。
- ******************************************************************************/
-static uint16_t turbo_apply(uint16_t bm)
-{
-    if (turbo_key != 0)
-    {
-        uint8_t rb = report_btn_bit[turbo_key];
-        if (rb != 0xFF && Joystick_GetKey(turbo_key))
-        {
-            if (turbo_on) bm |=  (uint16_t)(1u << rb);
-            else          bm &= ~(uint16_t)(1u << rb);
-        }
-    }
-    return bm;
-}
-
-/*******************************************************************************
  * 组 USB HID 8 字节报告(DirectInput 标准手柄格式)
  *   [0] 按键 bit0~7  (A/B/X/Y/LB/RB/View/Menu)
  *   [1] 按键 bit8~10 (L3/R3/Home)
@@ -401,12 +359,10 @@ void Joystick_GetHIDReport(uint8_t *buf)
      *      bit0=A  bit1=B bit2=X bit3=Y bit4=LB bit5=RB bit6=Home(Guide)
      *      bit7=Menu(Start) bit8=View(Back) bit9=L3 bit10=R3
      *      bit11=UP(已屏蔽) bit12=DOWN bit13=LEFT(已屏蔽) bit14=RIGHT(十字键同时走 Hat Switch)
-     *    byte0 = 位图 bit0~7,  byte1 = 位图 bit8~14
-     *    (应用 Turbo: 连发键按相位自动通断) */
+     *    byte0 = 位图 bit0~7,  byte1 = 位图 bit8~14 */
     {
-        uint16_t bm = turbo_apply(btn_bitmap);
-        buf[0] = (uint8_t)(bm & 0xFF);
-        buf[1] = (uint8_t)((bm >> 8) & 0xFF);
+        buf[0] = (uint8_t)(btn_bitmap & 0xFF);
+        buf[1] = (uint8_t)((btn_bitmap >> 8) & 0xFF);
     }
 
     /* 2. 方向键 Hat Switch: 直接读键真实状态(key_tbl), 不受按钮重映射影响
@@ -488,7 +444,6 @@ void Joystick_GetProcessed(uint16_t axis[6], uint16_t *bm)
         if (Joystick_GetKey(KEY_DOWN))  v |= (uint16_t)(1u << 12);
         if (Joystick_GetKey(KEY_LEFT))  v |= (uint16_t)(1u << 13);
         if (Joystick_GetKey(KEY_RIGHT)) v |= (uint16_t)(1u << 14);
-        v = turbo_apply(v);   /* 应用 Turbo(连发键相位) */
         *bm = v;
     }
 }
@@ -624,40 +579,4 @@ uint8_t Joystick_IsActive(void)
         }
     }
     return 0;
-}
-
-/*******************************************************************************
- * 按键连发(Turbo)参数读写
- ******************************************************************************/
-void Joystick_SetTurboKey(uint8_t key_id)
-{
-    turbo_key = (key_id <= KEY_NUM) ? key_id : 0;
-    turbo_tick = 0;
-    turbo_on   = 1;
-}
-
-uint8_t Joystick_GetTurboKey(void)
-{
-    return turbo_key;
-}
-
-void Joystick_SetTurboHz(uint8_t hz)
-{
-    if (hz == 0) hz = 1;        /* 频率下限 1Hz, 避免除零/全关死循环 */
-    turbo_hz = hz;
-    turbo_tick = 0;
-}
-
-uint8_t Joystick_GetTurboHz(void)
-{
-    return turbo_hz;
-}
-
-/* 对传入键位图就地应用 Turbo 相位(测试界面诊断用, 让连发键在键格上可见闪烁) */
-void Joystick_ApplyTurbo(uint16_t *bm)
-{
-    if (bm != 0)
-    {
-        *bm = turbo_apply(*bm);
-    }
 }
