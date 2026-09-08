@@ -118,10 +118,10 @@ uint8_t FlashSave_Load(PARAMS *p)
 /* 保存参数到 Flash */
 uint8_t FlashSave_Save(const PARAMS *p)
 {
-    uint16_t buf[512];   /* 1KB 页 = 512 半字 */
     uint8_t  raw[5 + sizeof(PARAMS) + 2];
     uint16_t crc;
     uint16_t i;
+    uint16_t total = (uint16_t)(5 + sizeof(PARAMS) + 2);
 
     /* 组装写入缓冲: magic(4) + version(1) + params + crc(2) */
     raw[0] = (uint8_t)(SAVE_MAGIC & 0xFF);
@@ -140,36 +140,32 @@ uint8_t FlashSave_Save(const PARAMS *p)
     raw[5 + sizeof(PARAMS)]     = (uint8_t)(crc & 0xFF);
     raw[5 + sizeof(PARAMS) + 1] = (uint8_t)((crc >> 8) & 0xFF);
 
-    /* 整页缓冲初始化为 0xFF(擦除态) */
-    for (i = 0; i < 512; i++)
-    {
-        buf[i] = 0xFFFF;
-    }
-
-    /* 将 raw 字节按半字打包到 buf */
-    {
-        uint16_t total = 5 + sizeof(PARAMS) + 2;
-        uint16_t lo, hi;
-        for (i = 0; i < total; i += 2)
-        {
-            lo = raw[i];
-            hi = (i + 1 < total) ? raw[i + 1] : 0xFF;
-            buf[i / 2] = (uint16_t)(lo | (hi << 8));
-        }
-    }
-
     /* 执行: 解锁 → 擦除 → 编程 → 锁定 */
     flash_unlock();
     flash_erase_page(SAVE_PAGE_ADDR);
 
-    for (i = 0; i < 512; i++)
+    /* 只写入有效半字, 页内其余区域保持擦除态 0xFFFF
+     * (旧版在此处使用 uint16_t buf[512] 整页栈上缓冲, 而 Stack_Size=0x400,
+     *  必然栈溢出踩踏 RAM; 现改为直接写入, 栈占用仅几十字节) */
+    for (i = 0; i < total; i += 2)
     {
-        if (buf[i] != 0xFFFF)   /* 只写非空半字, 减少磨损(全 0xFF 跳过) */
-        {
-            flash_program_halfword(SAVE_PAGE_ADDR + i * 2, buf[i]);
-        }
+        uint16_t lo = raw[i];
+        uint16_t hi = (uint16_t)((i + 1 < total) ? raw[i + 1] : 0xFF);
+        flash_program_halfword(SAVE_PAGE_ADDR + i, (uint16_t)(lo | (hi << 8)));
     }
 
     flash_lock();
+
+    /* 回读校验: 逐字节与预期一致才算成功 */
+    {
+        const uint8_t *chk = (const uint8_t *)SAVE_PAGE_ADDR;
+        for (i = 0; i < total; i++)
+        {
+            if (chk[i] != raw[i])
+            {
+                return 0;   /* 校验失败 */
+            }
+        }
+    }
     return 1;
 }
