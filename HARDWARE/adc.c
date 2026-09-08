@@ -7,6 +7,14 @@
  ******************************************************************************/
 #include "adc.h"
 
+/* 过采样次数: 每通道连续采样 N 次取均值。
+ * 根治相邻通道(PA1↔PA2)寄生耦合串扰: 串扰尖峰是随机/瞬态的,
+ * 多次采样平均后正负抵消, 从采样源头磨平, 而非靠后级滤波事后擦。
+ * N=8 时单通道约 8×21us≈170us, 6 路共约 1ms, 相对 10ms 帧周期可忽略。 */
+#ifndef ADC_OVERSAMPLE
+#define ADC_OVERSAMPLE  8
+#endif
+
 /*******************************************************************************
  * 函数名: MY_ADC_Init
  * 说明:   ADC1 独立模式 + 软件触发 + 单次转换, 每次读通道前重新配置规则组
@@ -55,9 +63,14 @@ void MY_ADC_Init(void)
  * 说明:   软件单次转换轮询, 与 day11/joystick 的 ADC_GetValue 行为一致
  *          通道切换后先做一次"丢弃转换"(dummy), 让采样保持电容充分稳定到新通道
  *          电压, 再做第二次转换取值, 消除相邻通道串扰(PA1↔PA2 等)。
+ *          本版升级为"过采样取均值": 每通道连续 ADC_OVERSAMPLE 次采样取平均,
+ *          从采样源头磨平随机/瞬态的寄生耦合尖峰(根治串扰, 而非后级擦)。
  ******************************************************************************/
 uint16_t ADC_GetValue(uint8_t ch)
 {
+    uint32_t sum = 0;
+    uint8_t  i;
+
     /* 配置规则组: 通道 ch, 采样顺序 1, 采样时间 239.5 周期 */
     ADC_RegularChannelConfig(ADC1, ch, 1, ADC_SampleTime_239Cycles5);
 
@@ -66,11 +79,15 @@ uint16_t ADC_GetValue(uint8_t ch)
     while (ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC) == RESET);
     (void)ADC_GetConversionValue(ADC1);          /* 丢弃, 仅为让采样电容充到 ch 真实电压 */
 
-    /* 第 2 次转换: 采样电容已稳定, 取此值作为真实结果 */
-    ADC_SoftwareStartConvCmd(ADC1, ENABLE);
-    while (ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC) == RESET);
+    /* 过采样: 连续 ADC_OVERSAMPLE 次采样取平均, 磨平耦合尖峰 */
+    for (i = 0; i < ADC_OVERSAMPLE; i++)
+    {
+        ADC_SoftwareStartConvCmd(ADC1, ENABLE);
+        while (ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC) == RESET);
+        sum += ADC_GetConversionValue(ADC1);
+    }
 
-    return (uint16_t)ADC_GetConversionValue(ADC1);
+    return (uint16_t)(sum / ADC_OVERSAMPLE);
 }
 
 /*******************************************************************************
