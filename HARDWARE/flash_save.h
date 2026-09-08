@@ -21,7 +21,7 @@ typedef struct
     uint16_t deadzone;      /* 摇杆死区(0~512, 需 uint16 否则 >255 被截断) */
     uint8_t  filter;        /* 滤波强度 */
     uint8_t  brightness;    /* OLED 对比度 */
-    uint8_t  idle_idx;      /* 熄屏选项索引(0=关 1=5s 2=10s 3=30s) */
+    uint8_t  idle_idx;      /* 熄屏选项索引(0=关 1=3s 2=5s 3=10s 4=30s, 见 menu.c idle_secs) */
     uint8_t  mode;          /* 工作模式(0=游戏 1=蓝牙) */
     uint8_t  bt_header;     /* 蓝牙包头 */
     uint8_t  bt_tail;       /* 蓝牙包尾 */

@@ -56,12 +56,10 @@ typedef void (*Joystick_CalProgressCB)(uint8_t percent);
 #define KEY_NUM     15
 
 /*---------------------- 摇杆逻辑轴映射(单一事实来源, 屏幕与 HID 共用) ----------------------*/
-/* 实物接线(2026-09-07 二次实测): 左摇杆接 PA0/PA1, 右摇杆接 PA2/PA3 —— 与 adc.h 的 L/R 标签一致。
- * 但摇杆模块在 PCB 上的安装方向使 VRX/VRY 与手持方向交叉:
- *   手持横向 X 实际由 PA1/PA3 响应, 手持纵向 Y 由 PA0/PA2 响应。
- * 故逻辑轴需在 VRX/VRY 间交叉, 但不交换 L/R。
- *   逻辑左X <- PA1 (L_VRY)   逻辑左Y <- PA0 (L_VRX)
- *   逻辑右X <- PA3 (R_VRY)   逻辑右Y <- PA2 (R_VRX) */
+/* 接线(直连): 左 X 电位器=PA0(VRX), 左 Y=PA1(VRY); 右 X=PA2(VRX), 右 Y=PA3(VRY)。
+ * 但摇杆模块 90° 错位安装: VRX 电位器实际感应"上下"、VRY 感应"左右"。
+ * 故逻辑轴需交叉: LX 取 VRY 通道, LY 取 VRX 通道(左右摇杆同理)。
+ * 效果: 逻辑轴 X/Y 与物理推杆方向一一对应(屏幕/ HID 方向正确)。 */
 #define AXIS_CH_LX      ADC_CH_L_VRY
 #define AXIS_CH_LY      ADC_CH_L_VRX
 #define AXIS_CH_RX      ADC_CH_R_VRY

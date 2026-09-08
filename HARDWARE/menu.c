@@ -53,6 +53,10 @@ static void unpack_params(const PARAMS *p)
     Joystick_SetFilter(p->filter);
     oled_brightness = p->brightness;  OLED_SetContrast(oled_brightness);
     idle_idx        = p->idle_idx;
+    if (idle_idx >= sizeof(idle_secs))
+    {
+        idle_idx = 1;   /* 非法索引保护, 防止 Menu_GetIdleTimeout() 数组越界 */
+    }
     mode            = (p->mode == MODE_BT) ? MODE_BT : MODE_GAME;
     bt_cfg.header       = p->bt_header;
     bt_cfg.tail         = p->bt_tail;
@@ -92,9 +96,9 @@ static uint8_t    stick_active = 0;
 /* 左摇杆上下移动光标的触发阈值(ADC 偏差, 满量程约 ±2048) */
 #define STICK_MOVE_TH   900
 
-/* 摇杆 X/Y 交叉映射(90°旋转修正)已统一收口到 joystick.h 的 AXIS_CH_*, 此处不再重复定义 */
+/* 摇杆轴映射统一收口到 joystick.h 的 AXIS_CH_*(90° 错位安装致逻辑轴交叉), 此处不再重复定义 */
 
-/* 左摇杆"垂直轴"的 ADC 通道: 与测试界面一致(垂直方向对应 VRX) */
+/* 左摇杆"垂直轴"的 ADC 通道: 与测试界面一致(见 AXIS_CH_LY) */
 static uint8_t stick_vert_ch(void)
 {
     return AXIS_CH_LY;

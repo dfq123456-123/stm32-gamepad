@@ -2,7 +2,7 @@
  * joystick.c - STM32F103C8T6 游戏手柄采集核心(根据反汇编逆向结果重写)
  *
  * 扫描时序: 主循环 10ms 一帧调用 Joystick_Scan()
- * 消抖策略: 按键电平连续 3 帧(30ms)相同才确认翻转
+ * 消抖策略: 按键电平连续 5 帧(50ms)相同才确认翻转
  ******************************************************************************/
 #include "joystick.h"
 #include "adc.h"
@@ -367,7 +367,8 @@ void Joystick_GetHIDReport(uint8_t *buf)
 
     /* 2. 方向键 Hat Switch: 直接读键真实状态(key_tbl), 不受按钮重映射影响
      *    键号 1~4(UP/DOWN/RIGHT/LEFT) → 标准 8 方向 Hat Switch 编码
-     *    临时屏蔽 UP/LEFT: 这两个方向物理接触粘连, 无按键时也读成按下, 导致 POV 始终指左上角 */
+     *    十字键在 report_btn_bit 中标为 0xFF(退出按钮位图), 仅走 Hat Switch;
+     *    蓝牙帧经 Joystick_GetProcessed() 把十字键物理状态回填到 bit11~14 */
     {
         uint8_t up    = Joystick_GetKey(KEY_UP);
         uint8_t down  = Joystick_GetKey(KEY_DOWN);

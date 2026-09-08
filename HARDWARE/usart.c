@@ -65,12 +65,29 @@ void MY_USART1_Init(uint32_t baud)
 }
 
 /*******************************************************************************
+ * 内部: TC 忙等超时上限(115200 下一字节约 87us, 超时说明 USART 异常, 避免卡死主循环)
+ ******************************************************************************/
+#define USART_TC_TIMEOUT  1000000u
+
+static void usart1_wait_tc(void)
+{
+    uint32_t t = 0;
+    while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET)
+    {
+        if (++t > USART_TC_TIMEOUT)
+        {
+            return;
+        }
+    }
+}
+
+/*******************************************************************************
  * 函数名: USART1_SendByte
  * 说明:   阻塞发送 1 字节, 等待 TC 标志置位 (参考工程写法)
  ******************************************************************************/
 void USART1_SendByte(uint8_t ch)
 {
-    while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET);
+    usart1_wait_tc();
     USART_SendData(USART1, ch);
 }
 
@@ -160,6 +177,13 @@ void BT_SendFrame(uint16_t axis[6], uint16_t btn_bitmap, BT_CONFIG *cfg)
  ******************************************************************************/
 void USART1_IRQHandler(void)
 {
+    if (USART_GetITStatus(USART1, USART_IT_ORE) == SET)
+    {
+        /* 溢出错误: 必须读 SR 后再读 DR 才能清除,
+         * 否则 ORE 挂起会导致接收中断反复触发/接收异常 */
+        (void)USART_ReceiveData(USART1);
+        return;
+    }
     if (USART_GetITStatus(USART1, USART_IT_RXNE) == SET)
     {
         bt_recv = USART_ReceiveData(USART1);
@@ -177,7 +201,7 @@ FILE __stdin;
 
 int fputc(int ch, FILE *f)
 {
-    while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET);
+    usart1_wait_tc();
     USART_SendData(USART1, ch);
     return ch;
 }
