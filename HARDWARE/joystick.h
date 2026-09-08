@@ -27,7 +27,8 @@
 typedef void (*Joystick_CalProgressCB)(uint8_t percent);
 
 /*---------------------- 用户可调参数(运行时可被菜单修改) ----------------------*/
-#define JOY_DEADZONE_DEFAULT     150     /* 摇杆死区默认值: |raw-center|<150 视为回中 */
+#define JOY_DEADZONE_DEFAULT     300     /* 摇杆死区默认值: |raw-center|<300 视为回中
+                                          * (抬到 300 以盖住 PA1↔PA2 相邻通道快速推杆时的瞬态串扰尖峰) */
 #define JOY_FILTER_DEFAULT       3       /* 滤波强度默认值: 一阶低通移位量(0=无滤波) */
 #define JOY_CAL_NUM              100     /* 开机中心校准采样次数(博主固件=100) */
 #define JOY_TRIG_DIFF_DEAD       120     /* 扳机差动比例死区: |NormRT-NormLT|<120 视为零差, 抑制中位噪声 */
@@ -116,13 +117,6 @@ int16_t Joystick_GetDeadzoneNorm(uint8_t ch);
 
 /* 是否有活动(供空闲熄屏判定): 任意键按下 或 任意轴超出死区外(归一化|v|>128) */
 uint8_t Joystick_IsActive(void);
-
-/* 按键连发(Turbo): 选定键按住时按设定频率自动通断, 模拟快速点按 */
-void    Joystick_SetTurboKey(uint8_t key_id);   /* key_id=0 关闭; 否则 1~15 */
-uint8_t Joystick_GetTurboKey(void);
-void    Joystick_SetTurboHz(uint8_t hz);        /* 连发频率 Hz(2/4/8/16...) */
-uint8_t Joystick_GetTurboHz(void);
-void    Joystick_ApplyTurbo(uint16_t *bm);      /* 对传入键位图应用 Turbo 相位(就地修改) */
 
 /* 取处理后数据(供蓝牙帧组包用, buf 至少 6 个 uint16_t + 1 个 uint16_t 键位图) */
 void Joystick_GetProcessed(uint16_t axis[6], uint16_t *btn_bitmap);

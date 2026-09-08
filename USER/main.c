@@ -135,7 +135,8 @@ int main(void)
                     idle_acc = 0;
                     if (oled_off)
                     {
-                        OLED_DisplayOn();   /* 恢复最后帧缓冲画面 */
+                        OLED_DisplayOn();       /* 恢复显示 */
+                        Menu_ForceRedraw();     /* 强制全量重画, 清掉熄屏期间残留的坏像素 */
                         oled_off = 0;
                     }
                 }

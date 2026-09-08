@@ -35,7 +35,7 @@ static uint8_t save_delay_cnt = 0;        /* 延时计数: 改动后等若干帧
 static void pack_params(PARAMS *p)
 {
     p->version      = PARAM_VERSION;
-    p->deadzone     = (uint8_t)Joystick_GetDeadzone();
+    p->deadzone     = Joystick_GetDeadzone();
     p->filter       = (uint8_t)Joystick_GetFilter();
     p->brightness   = oled_brightness;
     p->idle_idx     = idle_idx;
@@ -70,6 +70,7 @@ static void mark_param_changed(void)
 /* 在 Menu_Tick 末尾调用: 若有待保存且已过延时, 写入 Flash */
 static void save_if_pending(void)
 {
+    PARAMS p;
     if (!menu_dirty_for_save) return;
 
     /* 等待 100 帧(~1s) 无新改动再写, 避免用户调参时频繁擦写 */
@@ -79,7 +80,6 @@ static void save_if_pending(void)
         return;
     }
 
-    PARAMS p;
     pack_params(&p);
     FlashSave_Save(&p);
     menu_dirty_for_save = 0;
@@ -429,6 +429,19 @@ static void test_enter(void)
     prev_rx = 0xFF; prev_ry = 0xFF;
     prev_fl = 0;    prev_fr = 0;
     test_force = 1;
+}
+
+/* 熄屏唤醒后由 main 调用: 强制测试界面全量重画。
+ * 原因: test_draw 走增量刷新, 像素坐标没变就直接 return 跳过重画; 而熄屏期间
+ *       屏幕内容可能丢失/错乱, 唤醒后若坐标恰好没变, 坏像素永远刷不掉 -> 残影(粘连)。
+ *       置 test_force=1 可让下一帧无条件走 OLED_Clear() + 全量重画。 */
+void Menu_ForceRedraw(void)
+{
+    prev_lx = 0xFF; prev_ly = 0xFF;
+    prev_rx = 0xFF; prev_ry = 0xFF;
+    prev_fl = 0;    prev_fr = 0;
+    test_force   = 1;
+    menu_dirty   = 1;
 }
 
 /*---------------------- 测试手柄界面绘制(每帧调用) ----------------------*/
