@@ -209,11 +209,11 @@ void Joystick_Scan(void)
         /* 滤波强度自适应: 用 raw 与 joy_val 的差距判断是否在移动。
          * 阈值选取关键: ADC 残余串扰约 20-40 LSB, 必须落入重滤波区被压住;
          *   真正推杆 raw 偏离 >100, 走轻/无滤波保证跟手。
-         * vdelta>120: 大幅移动, 无滤波(raw 直通, 0 延迟)
+         * vdelta>120: 大幅移动, 轻滤波(fn=1, 每帧取1/2, 压串扰又不钝)
          * vdelta>60:  小幅移动, 轻滤波(跟手)
          * 其余:        静止 + 串扰残余, 重滤波去抖 */
         int32_t  vdelta = (int32_t)joy_raw[ch] - (int32_t)joy_val[ch];
-        uint8_t  fn = (vdelta > 120 || vdelta < -120) ? 0u :  /* 大幅移动: 无滤波 */
+        uint8_t  fn = (vdelta > 120 || vdelta < -120) ? 1u :  /* 大幅移动: 轻滤波(压串扰, 直通会放过尖峰) */
                      (vdelta > 60  || vdelta < -60)  ? 1u :   /* 小幅移动: 轻滤波 */
                      joy_filter;                             /* 静止+串扰: 重滤波 */
         uint16_t f = lowpass(joy_val[ch], joy_raw[ch], fn);
