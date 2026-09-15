@@ -286,9 +286,12 @@ static void draw_item(uint8_t line, uint8_t idx, uint8_t selected)
                 OLED_ShowString(x, line, buf);
             }
         }
-        else            /* idx==4: 测试手柄(动作项, 英文标签避免扩充中文字库) */
+        else            /* idx==4: 手柄校准 */
         {
-            OLED_ShowString(x, line, "TEST");
+            OLED_ShowCN(x, line, CN_SHOU);  x += 16;
+            OLED_ShowCN(x, line, CN_BING);  x += 16;
+            OLED_ShowCN(x, line, CN_JIAO);  x += 16;
+            OLED_ShowCN(x, line, CN_ZHUN);
         }
     }
     else
@@ -357,17 +360,17 @@ static void show_mode_banner(void)
     OLED_Clear();
     if (mode == MODE_GAME)
     {
-        OLED_ShowCN(24, 1, CN_YOU_XI);   /* 游 */
-        OLED_ShowCN(40, 1, CN_XI);       /* 戏 */
-        OLED_ShowCN(56, 1, CN_MO);       /* 模 */
-        OLED_ShowCN(72, 1, CN_SHI);      /* 式 */
+        OLED_ShowCN(32, 1, CN_YOU_XI);   /* 游 */
+        OLED_ShowCN(48, 1, CN_XI);       /* 戏 */
+        OLED_ShowCN(64, 1, CN_MO);       /* 模 */
+        OLED_ShowCN(80, 1, CN_SHI);      /* 式 */
     }
     else
     {
-        OLED_ShowCN(24, 1, CN_LAN);      /* 蓝 */
-        OLED_ShowCN(40, 1, CN_YA);       /* 牙 */
-        OLED_ShowCN(56, 1, CN_MO);       /* 模 */
-        OLED_ShowCN(72, 1, CN_SHI);      /* 式 */
+        OLED_ShowCN(32, 1, CN_LAN);      /* 蓝 */
+        OLED_ShowCN(48, 1, CN_YA);       /* 牙 */
+        OLED_ShowCN(64, 1, CN_MO);       /* 模 */
+        OLED_ShowCN(80, 1, CN_SHI);      /* 式 */
     }
     OLED_Refresh();
 }
