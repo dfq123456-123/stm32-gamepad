@@ -1,8 +1,0 @@
-si SWD
-speed 4000
-device STM32F103C8
-connect
-loadfile Objects/demo.hex
-r
-g
-q
