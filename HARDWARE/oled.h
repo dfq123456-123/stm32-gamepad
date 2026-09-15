@@ -62,6 +62,8 @@ typedef enum
     CN_FA,         /* 43 发 */
     CN_SU,         /* 44 速 */
     CN_PING,       /* 45 屏 */
+    CN_SHOU,       /* 46 手 */
+    CN_BING,       /* 47 柄 */
     CN_MAX
 } CN_INDEX;
 
