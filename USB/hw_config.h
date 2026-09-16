@@ -22,7 +22,7 @@ void Enter_LowPowerMode(void);
 void Leave_LowPowerMode(void);
 void USB_Interrupts_Config(void);
 void USB_Cable_Config (FunctionalState NewState);
-void Joystick_Send(void);       /* 组 8 字节 HID 报告并经 EP1 发送 */
+void Joystick_Send(void);       /* 组 9 字节 HID 报告并经 EP1 发送 */
 void Get_SerialNum(void);
 
 #endif  /*__HW_CONFIG_H*/

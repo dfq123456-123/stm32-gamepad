@@ -222,7 +222,7 @@ void Joystick_Scan(void)
         /* 死区归零: |Δ| < 死区 → 强制回中心(摇杆轴) */
         if (diff > -((int16_t)joy_deadzone) && diff < (int16_t)joy_deadzone)
         {
-            /* 摇杆 4 轴做死区; 扳机 2 轴(通道4/5)也做死区归零, 保持静止差动=0 */
+            /* 摇杆 4 轴做死区; 扳机 2 轴(通道4/5)也做死区归零, 保证静止时两扳机轴都为 0 */
             f = joy_center[ch];
             diff = 0;
         }
@@ -343,16 +343,28 @@ static uint8_t axis_to_hid(uint8_t ch)
 }
 
 /*******************************************************************************
- * 组 USB HID 8 字节报告(DirectInput 标准手柄格式)
+ * 扳机轴 → HID 字节: 0=松开, 255=按到底(自适应量程, 满按必到 255)
+ * 用 GetNormAbs(绝对偏差)与扳机极性无关; 静止噪声已由 Joystick_Scan 内死区归零
+ ******************************************************************************/
+static uint8_t trigger_to_hid(uint8_t ch)
+{
+    int32_t v = (int32_t)Joystick_GetNormAbs(ch);   /* 0~1024 */
+    v = v * 255 / 1024;
+    if (v > 255) v = 255;
+    if (v <   0) v =   0;
+    return (uint8_t)v;
+}
+
+/*******************************************************************************
+ * 组 USB HID 9 字节报告(DirectInput 标准手柄格式 + 独立双扳机轴)
  *   [0] 按键 bit0~7  (A/B/X/Y/LB/RB/View/Menu)
  *   [1] 按键 bit8~10 (L3/R3/Home)
  *   [2] 方向键 dpad (0~8)
- *   [3] 摇杆1X [4] 摇杆1Y [5] 差动比例 [6] 摇杆2X [7] 摇杆2Y(反向)
+ *   [3] 摇杆1X [4] 摇杆1Y [5] 左扳机Z [6] 摇杆2X [7] 摇杆2Y(反向) [8] 右扳机Rz
  ******************************************************************************/
 void Joystick_GetHIDReport(uint8_t *buf)
 {
     uint8_t  dpad = 0;
-    int32_t  dLT, dRT, sl;
 
     /* 1. 按键字节: 透传已按 XInput 标准序重映射的 15 位键位图(report_btn_bit)
      *    位图 bit 序 = Steam/PC 看到的按钮序(按钮1~15):
@@ -402,22 +414,12 @@ void Joystick_GetHIDReport(uint8_t *buf)
         buf[7] = (uint8_t)(0x80 - v);
     }
 
-    /* 4. 差动比例: 用自适应归一化值(0~1024)替代固定 ±2048, 满推必到边界
-     *    nRT-nLT ∈ [-1024,1024], +1024 → [0,2048], /2048*255, 钳位 5~250
-     *    加死区抑制双扳机中位噪声, 避免 Z 轴在静止时跳动 */
-    dLT = Joystick_GetNormAbs(ADC_CH_LT);
-    dRT = Joystick_GetNormAbs(ADC_CH_RT);
-    {
-        int32_t diff = (int32_t)dRT - (int32_t)dLT;
-        if (diff > -JOY_TRIG_DIFF_DEAD && diff < JOY_TRIG_DIFF_DEAD)
-        {
-            diff = 0;   /* 两扳机归一化偏差很小 → 视为无差动, Z 轴锁定中位 */
-        }
-        sl = (diff + 1024) * 255 / 2048;
-    }
-    if (sl < 5)   sl = 5;
-    if (sl > 250) sl = 250;
-    buf[5] = (uint8_t)sl;
+    /* 4. 扳机轴: LT/RT 各占一根独立轴(Z / Rz), 0=松开, 255=按到底
+     *    原实现为"两扳机差动合成单根 Z 轴"(diff = RT - LT): 两扳机同时按下且
+     *    深度接近时 diff≈0 落到中位 → PC 判为"没按扳机", 无法同时按。
+     *    改为独立双轴后两扳机可同时上报(报告因此由 8 字节扩为 9 字节)。 */
+    buf[5] = trigger_to_hid(ADC_CH_LT);   /* Z  = 左扳机 LT */
+    buf[8] = trigger_to_hid(ADC_CH_RT);   /* Rz = 右扳机 RT */
 }
 
 /*******************************************************************************
