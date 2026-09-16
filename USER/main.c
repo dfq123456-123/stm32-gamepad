@@ -3,14 +3,14 @@
  *
  * 功能:
  *   采集双摇杆(4轴) + 左右扳机(2轴) + 15 键, 双模式上报:
- *     1. 游戏控制器模式(USB HID, View 键切换): 8 字节标准 HID 报告(11按钮+dpad+5轴)
+ *     1. 游戏控制器模式(USB HID, View 键切换): 9 字节标准 HID 报告(15按钮+dpad+6轴)
  *     2. 蓝牙控制器模式(UART 透传, View 键切换): 可配置包头/包尾/hex/换行的串口帧
  *   外加: OLED 菜单(Menu 键打开, 含死区/滤波/测试手柄)、WS2812B 氛围灯强制熄灭(PA8 持续拉低)
  *
  * 主循环 10ms 一帧(100Hz):
  *   Joystick_Scan()  -> 15 键消抖 + 6 路 ADC + 滤波 + 死区 + 动态校准
  *   Menu_Tick()      -> 三键语义(Home=返回/Menu=开关菜单/View=切换模式) + OLED 刷新
- *   Joystick_Send()  -> 游戏模式下组 8 字节 USB HID 报告并经 EP1 发送
+ *   Joystick_Send()  -> 游戏模式下组 9 字节 USB HID 报告并经 EP1 发送
  *   BT_SendFrame()   -> 蓝牙模式下组帧并经 USART1 发送
  *
  * 开机流程: USB(提前, 上电即就绪) -> 串口 -> 手柄(无校准) -> 灯带(熄灭) -> OLED 自检 ->
@@ -167,7 +167,7 @@ int main(void)
             /* 游戏模式: USB HID, 枚举完成且上一帧发送完毕才发 */
             if ((bDeviceState == CONFIGURED) && PrevXferComplete)
             {
-                Joystick_Send();    /* 8 字节 HID 报告 */
+                Joystick_Send();    /* 9 字节 HID 报告 */
             }
         }
         else

@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    usb_conf.h
   * @brief   USB HID GamePad 配置(基于 ST JoyStickMouse V3.4.0 改造)
-  *          EP0 控制端点 + EP1 IN 中断端点(8 字节 HID 报告)
+  *          EP0 控制端点 + EP1 IN 中断端点(9 字节 HID 报告)
   ******************************************************************************
   */
 #ifndef __USB_CONF_H
@@ -21,7 +21,7 @@
 #define ENDP0_RXADDR        (0x18)
 #define ENDP0_TXADDR        (0x58)
 
-/* EP1  tx buffer base address (8 字节报告, 0x100 起 128 字节空间足够) */
+/* EP1  tx buffer base address (9 字节报告, 0x100 起 128 字节空间足够) */
 #define ENDP1_TXADDR        (0x100)
 
 /*-------------------------------------------------------------*/

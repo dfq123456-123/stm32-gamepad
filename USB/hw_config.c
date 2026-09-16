@@ -111,7 +111,7 @@ void USB_Cable_Config (FunctionalState NewState)
 
 /*******************************************************************************
 * Function Name  : Joystick_Send
-* Description    : 组 8 字节 HID 报告并发送 (EP1 IN, 中断传输)
+* Description    : 组 9 字节 HID 报告并发送 (EP1 IN, 中断传输)
 *                  调用前确保 bDeviceState == CONFIGURED 且 PrevXferComplete
 *******************************************************************************/
 void Joystick_Send(void)

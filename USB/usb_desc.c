@@ -2,8 +2,9 @@
   ******************************************************************************
   * @file    usb_desc.c
   * @brief   USB HID GamePad 描述符
-  *          8 字节报告: [0]按钮1-8 [1]按钮9-15+1padding [2]Hat Switch(方向键/十字键)
- *                      [3]X(左摇杆横) [4]Y(左摇杆纵) [5]Z(扳机差动) [6]Rx(右摇杆横) [7]Ry(右摇杆纵)
+  *          9 字节报告: [0]按钮1-8 [1]按钮9-15+1padding [2]Hat Switch(方向键/十字键)
+ *                      [3]X(左摇杆横) [4]Y(左摇杆纵) [5]Z(左扳机) [6]Rx(右摇杆横) [7]Ry(右摇杆纵)
+ *                      [8]Rz(右扳机) —— LT/RT 各自独立成轴, 可同时按下(原为两扳机差动合成单轴)
  *          按钮序(XInput, 由 joystick.c 的 report_btn_bit 重映射): 1=A 2=B 3=X 4=Y 5=LB 6=RB
  *                      7=View 8=Menu 9=Home 10=L3 11=R3  12=UP 13=DOWN 14=LEFT 15=RIGHT(十字键走 Hat+按钮12~15)
   *          VID=0x0483(ST) PID=0x5750 (与博主固件一致)
@@ -83,10 +84,12 @@ const uint8_t Joystick_ConfigDescriptor[JOYSTICK_SIZ_CONFIG_DESC] =
   };
 
 /* HID Report Descriptor: Game Pad
- * 报告布局(8 字节, 与博主固件权威格式一致):
+ * 报告布局(9 字节):
  *   [0] 按键 bit0~7   [1] 按键 bit8~14   [2] 方向键 Hat Switch(0~8)
- *   [3] X(摇杆1X) [4] Y(摇杆1Y) [5] Z(差动比例) [6] Rx(摇杆2X) [7] Ry(摇杆2Y)
- * 描述符: 15 按钮 + 1 位 padding + Hat Switch(4位) + 4 位 padding + 5 轴(8位各) */
+ *   [3] X(摇杆1X) [4] Y(摇杆1Y) [5] Z(左扳机) [6] Rx(摇杆2X) [7] Ry(摇杆2Y) [8] Rz(右扳机)
+ * 描述符: 15 按钮 + 1 位 padding + Hat Switch(4位) + 4 位 padding + 6 轴(8位各)
+ * ⚠️ 原为 8 字节/5 轴: byte5 = Z 承载"两扳机差动"(RT-LT), 导致两扳机同时按下且深度
+ *    接近时 diff≈0 落到中位 → PC 判为"没按扳机". 故扩为 9 字节/6 轴, LT/RT 各占独立轴. */
 const uint8_t Joystick_ReportDescriptor[JOYSTICK_SIZ_REPORT_DESC] =
   {
     0x05, 0x01,          /* Usage Page (Generic Desktop) */
@@ -125,14 +128,15 @@ const uint8_t Joystick_ReportDescriptor[JOYSTICK_SIZ_REPORT_DESC] =
 
     0x09, 0x30,          /*     Usage (X)  = 摇杆1X */
     0x09, 0x31,          /*     Usage (Y)  = 摇杆1Y */
-    0x09, 0x32,          /*     Usage (Z)  = 差动比例(扳机) */
+    0x09, 0x32,          /*     Usage (Z)  = 左扳机 LT(独立轴, 原为两扳机差动合成) */
     0x09, 0x33,          /*     Usage (Rx) = 摇杆2X */
-    0x09, 0x34,          /*     Usage (Ry) = 摇杆2Y(右纵; 原 0x35/Rz 为笔误, 与注释不一致) */
+    0x09, 0x34,          /*     Usage (Ry) = 摇杆2Y(右纵) */
+    0x09, 0x35,          /*     Usage (Rz) = 右扳机 RT(独立轴) */
     0x15, 0x00,          /*     Logical Minimum (0) */
     0x26, 0xFF, 0x00,    /*     Logical Maximum (255) */
     0x75, 0x08,          /*     Report Size (8) */
-    0x95, 0x05,          /*     Report Count (5) */
-    0x81, 0x02,          /*     Input (Data,Var,Abs): byte3~7 = 5 轴 */
+    0x95, 0x06,          /*     Report Count (6) */
+    0x81, 0x02,          /*     Input (Data,Var,Abs): byte3~8 = 6 轴 */
 
     0xC0,                /*   End Collection */
     0xC0                 /* End Collection */

@@ -21,7 +21,7 @@
 
 #define JOYSTICK_SIZ_DEVICE_DESC                18
 #define JOYSTICK_SIZ_CONFIG_DESC                34      /* 9配置 + 9接口 + 9HID + 7端点 */
-#define JOYSTICK_SIZ_REPORT_DESC                80      /* Game Pad 报告描述符: 11按钮+dpad+5轴 */
+#define JOYSTICK_SIZ_REPORT_DESC                82      /* Game Pad 报告描述符: 15按钮+dpad+6轴 */
 #define JOYSTICK_SIZ_STRING_LANGID              4
 #define JOYSTICK_SIZ_STRING_VENDOR              38
 #define JOYSTICK_SIZ_STRING_PRODUCT             36
@@ -29,8 +29,9 @@
 
 #define STANDARD_ENDPOINT_DESC_SIZE             0x09
 
-/* HID 报告长度: 2 按键字节 + 4 摇杆轴 + 2 扳机 = 8 字节 */
-#define JOYSTICK_REPORT_LEN                     8
+/* HID 报告长度: 2 按键字节 + 1 Hat 字节 + 6 轴 = 9 字节
+ * 6 轴 = 双摇杆 4 轴(X/Y/Rx/Ry) + 左扳机 Z + 右扳机 Rz(各自独立, 可同时按) */
+#define JOYSTICK_REPORT_LEN                     9
 
 extern const uint8_t Joystick_DeviceDescriptor[JOYSTICK_SIZ_DEVICE_DESC];
 extern const uint8_t Joystick_ConfigDescriptor[JOYSTICK_SIZ_CONFIG_DESC];
