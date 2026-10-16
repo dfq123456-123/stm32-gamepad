@@ -1,47 +1,32 @@
-/*******************************************************************************
- * delay.c - SysTick 毫秒/微秒延时
- *
- * F4 -> F103 移植要点: 系统时钟 168MHz -> 72MHz,
- *   1ms 装载值由 168000-1 改为 72000-1
- ******************************************************************************/
+//delay.c  SysTick 延时
+
 #include "delay.h"
 
-/*******************************************************************************
- * 函数名: delay_ms
- * 说明:   重装载法延时, 每次重装 LOAD 并等待 COUNTFLAG (参考工程写法)
- ******************************************************************************/
+//毫秒延时: 重装载法, 每次重填 LOAD 然后等 COUNTFLAG
 void delay_ms(uint32_t ms)
 {
-    while (ms--)
-    {
-        SysTick->CTRL = 0;            /* 关闭后才能配置寄存器 */
-        SysTick->LOAD = 72000 - 1;    /* 72MHz / 1000 = 72000, 1ms */
-        SysTick->VAL  = 0;            /* 清空当前值 + 计数标志 */
-        SysTick->CTRL = 5;            /* 使能, 时钟源=系统时钟72MHz */
-        while ((SysTick->CTRL & (1 << 16)) == 0);  /* 等待计数完毕 */
-        SysTick->CTRL = 0;
-    }
+	while(ms--)
+	{
+		SysTick->CTRL=0;					//先关掉才能配寄存器
+		SysTick->LOAD=72000-1;				//72MHz/1000=72000, 就是 1ms
+		SysTick->VAL=0;						//清当前值, 顺带清计数标志
+		SysTick->CTRL=5;					//使能, 时钟源选系统时钟
+		while((SysTick->CTRL & (1<<16))==0);//等这次数完
+		SysTick->CTRL=0;
+	}
 }
 
-/*******************************************************************************
- * 函数名: delay_us
- * 说明:   微秒延时, us=0 直接返回; 最大 233016 (SysTick 24bit 计数器上限),
- *         超出自动钳位, 避免旧版 LOAD=0xFFFFFFFF 造成约 0.23s 超长等待
- ******************************************************************************/
+//微秒延时: 最大 233016us(SysTick 只有 24bit), 超了自动钳位
+//以前 LOAD 直接填 0xFFFFFFFF, 实测会卡出 0.23s, 这里专门封顶
 void delay_us(uint32_t us)
 {
-    if (us == 0)
-    {
-        return;
-    }
-    if (us > 233016u)
-    {
-        us = 233016u;
-    }
-    SysTick->CTRL = 0;
-    SysTick->LOAD = 72 * us - 1;      /* 72MHz, us 微秒 */
-    SysTick->VAL  = 0;
-    SysTick->CTRL = 5;
-    while ((SysTick->CTRL & (1 << 16)) == 0);
-    SysTick->CTRL = 0;
+	if(us==0)return;
+	if(us>233016u)us=233016u;
+
+	SysTick->CTRL=0;
+	SysTick->LOAD=72*us-1;					//72MHz, us 微秒
+	SysTick->VAL=0;
+	SysTick->CTRL=5;
+	while((SysTick->CTRL & (1<<16))==0);
+	SysTick->CTRL=0;
 }

@@ -26,8 +26,9 @@ Listings/
 # ============ Keil 用户/临时文件 ============
 # 窗口布局(含本机用户名与绝对路径)
 *.uvguix.*
-# J-Link 日志
+# J-Link 日志与调试配置(每次调试自动重新生成, 含本机设置)
 JLinkLog.txt
+JLinkSettings.ini
 # UV4 命令行编译日志
 build_log.txt
 # 他人/CI 构建校验日志(非源码)
