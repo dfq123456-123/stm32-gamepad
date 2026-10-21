@@ -59,7 +59,6 @@
 | OLED SCL / SDA | PB12 / PB13 | 软件 I2C |
 | USART1 TX / RX | PA9 / PA10 | 接 HC-05/06 蓝牙模块 |
 | USB D- / D+ | PA11 / PA12 | |
-| WS2812B DIN | PA8 | 开机强制拉低熄灭 |
 
 > 按键统一接 GND、MCU 内部上拉，读取到低电平即为按下。PB3 / PB4 默认是 JTAG 脚，代码里已做 `GPIO_Remap_SWJ_JTAGDisable` 重映射。
 

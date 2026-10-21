@@ -55,7 +55,7 @@ static void mark_param_changed(void)
 	save_delay_cnt = 0;
 }
 
-//改动后等 100 帧(~1s) 无新改动再写, 避免调参时频繁擦写
+//延迟落盘: 100 帧无改动再写
 static void save_if_pending(void)
 {
 	PARAMS p;
@@ -214,7 +214,7 @@ static void adjust_cur(int8_t dir)
 	item_set(menu_idx, (uint16_t)val);
 }
 
-//选中项用 '>' 光标标识(替代反白高亮条)
+//选中项用 > 光标标识
 static void draw_item(uint8_t line, uint8_t idx, uint8_t selected)
 {
 	uint8_t x = 8;
@@ -403,7 +403,7 @@ static uint8_t  prev_rx = 0xFF, prev_ry = 0xFF;
 static uint8_t  prev_fl = 0,    prev_fr = 0;
 static uint8_t  test_force = 1;	 //1=强制全量重画(进入界面/首次)
 
-//进入测试界面必须重置 prev_*, 否则摇杆没动直接 return 跳过重画 = 假死
+//进测试界面重置 prev_*, 强制全量重画
 static void test_enter(void)
 {
 	Joystick_Calibrate_Ex(0);	 //重新校准中心 + 重置自适应量程
@@ -422,7 +422,7 @@ void Menu_ForceRedraw(void)
 	menu_dirty   = 1;
 }
 
-//测试界面: 顶部左右扳机条 + 中部左右摇杆框(中心十字+位置圆点), 无数字
+//测试界面: 扳机条 + 摇杆框
 static void test_draw(void)
 {
 	int16_t  nlx, nly, nrx, nry;	 //归一化(±1024)
@@ -444,7 +444,7 @@ static void test_draw(void)
 	hx = (int16_t)(lw / 2 - 4);
 	hy = (int16_t)(lh / 2 - 4);
 
-	//用滤波后归一化 GetNorm(与 HID 同源), 自适应滤波移动时 n=1 跟手, 静止 n=3 去抖
+	//取 GetNorm, 与 HID 同源
 	nlx = Joystick_GetNorm(AXIS_CH_LX);
 	nly = Joystick_GetNorm(AXIS_CH_LY);
 	nrx = Joystick_GetNorm(AXIS_CH_RX);
@@ -508,7 +508,7 @@ void Menu_Init(void)
 	menu_dirty = 1;
 }
 
-//每帧状态机: 测试界面 -> 全局键 -> 菜单导航 -> 重画 -> 落盘
+//每帧: 测试 -> 全局键 -> 导航 -> 重画 -> 落盘
 //状态 CLOSED(模式页) / OPEN(列表) / TEST(测试界面)
 void Menu_Tick(void)
 {

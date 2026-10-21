@@ -1,6 +1,6 @@
 //flash_save.c  参数断电保存(F103 内部 Flash)
 //最后一页 0x0800FC00~0x0800FFFF 专门放参数, 不写代码
-//格式: magic(4) + version(1) + 参数体 + crc(2), 改结构要递增 PARAM_VERSION 让旧数据失效
+//存储格式: magic(4)+version(1)+参数体+crc(2)
 
 #include "flash_save.h"
 #include "stm32f10x.h"
@@ -70,7 +70,7 @@ static uint16_t crc16(const uint8_t *buf, uint32_t len)
 	return crc;
 }
 
-//读参数: 返回 1=有效, 0=首次上电/版本不符/校验失败, 让调用方填默认值
+//读参数, 1=有效 0=无效
 uint8_t FlashSave_Load(PARAMS *p)
 {
 	const uint8_t *base=(const uint8_t *)SAVE_PAGE_ADDR;
@@ -123,7 +123,7 @@ uint8_t FlashSave_Save(const PARAMS *p)
 	flash_unlock();
 	flash_erase_page(SAVE_PAGE_ADDR);
 
-	//两个字节拼成一个半字写进去。别再搞 uint16_t buf[512] 那种整页栈缓冲, Stack_Size 只有 0x400 会溢出
+	//按半字逐个写入, Stack_Size 只有 0x400
 	for(i=0;i<total;i+=2)
 	{
 		uint16_t lo=raw[i];

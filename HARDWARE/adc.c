@@ -1,7 +1,6 @@
 #include "adc.h"
 
-//过采样 8 次取均值, 磨平相邻通道(PA1↔PA2)的寄生耦合串扰
-//配合 ADC_ReadAll 的交错顺序(0,2,4,1,3,5)双保险
+//每通道过采样 8 次取均值, 配合交错顺序压相邻通道串扰
 #ifndef ADC_OVERSAMPLE
 #define ADC_OVERSAMPLE  8
 #endif
@@ -37,7 +36,7 @@ void MY_ADC_Init(void)
 	while (ADC_GetCalibrationStatus(ADC1));
 }
 
-#define ADC_EOC_TIMEOUT  200000u	 //正常约 21us, 超时说明外设异常避免死等
+#define ADC_EOC_TIMEOUT  200000u	 //单次转换约 21us
 
 //等转换完成, 超时返回 0 防止外设异常卡死
 static uint8_t adc_wait_eoc(void)
@@ -85,7 +84,7 @@ uint16_t ADC_GetValue(uint8_t ch)
 //一次读满 6 路
 void ADC_ReadAll(uint16_t *buf)
 {
-	//交错顺序 0,2,4,1,3,5: 避免相邻通道连着采放大串扰
+	//交错顺序 0,2,4,1,3,5: 隔开相邻通道
 	static const uint8_t order[ADC_CH_NUM] = { 0, 2, 4, 1, 3, 5 };
 	uint8_t i;
 	for (i = 0; i < ADC_CH_NUM; i++)

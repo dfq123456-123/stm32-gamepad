@@ -3,7 +3,6 @@
 volatile uint8_t bt_recv = 0;	 //最近收到的字节
 
 //串口1 初始化: PA9=TX PA10=RX, 开接收中断
-//从 F4 移植过来, 只改了时钟使能(AHB1 -> APB2)
 void MY_USART1_Init(uint32_t baud)
 {
 	GPIO_InitTypeDef  GPIO_InitStructure;
@@ -41,7 +40,7 @@ void MY_USART1_Init(uint32_t baud)
 	USART_Cmd(USART1, ENABLE);
 }
 
-//TC 忙等超时: 115200 下一字节约 87us, 超时就放弃避免卡死
+//TC 等待上限: 115200 下一字节约 87us
 #define USART_TC_TIMEOUT  1000000u
 
 //等上一个字节发完
@@ -83,8 +82,8 @@ void USART1_SendBuffer(uint8_t *buf, uint16_t len)
 	}
 }
 
-//组蓝牙帧: 包头 + 6路轴(低字节在前) + 按键2字节 + 包尾
-//use_hex=1 时整帧转 ASCII 十六进制发出去, 方便串口助手看
+//组蓝牙帧: 包头+6轴+按键+包尾
+//use_hex=1 时转 ASCII 十六进制
 void BT_SendFrame(uint16_t axis[6], uint16_t btn_bitmap, BT_CONFIG *cfg)
 {
 	static const char hex_chars[] = "0123456789ABCDEF";
@@ -122,7 +121,7 @@ void BT_SendFrame(uint16_t axis[6], uint16_t btn_bitmap, BT_CONFIG *cfg)
 	}
 }
 
-//ORE 要先读 SR 再读 DR 才能清, 不清会反复进中断
+//ORE 清标志
 void USART1_IRQHandler(void)
 {
 	if (USART_GetITStatus(USART1, USART_IT_ORE) == SET)
@@ -137,7 +136,7 @@ void USART1_IRQHandler(void)
 	}
 }
 
-//printf 重定向到串口1, 禁掉半主机否则没开仿真器会跑飞
+//printf 重定向到串口1
 #pragma import(__use_no_semihosting_swi)
 
 struct __FILE { int handle; };

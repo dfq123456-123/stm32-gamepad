@@ -11,29 +11,13 @@
 #include "usb_lib.h"
 #include "usb_pwr.h"
 
-//氛围灯(WS2812B, DIN=PA8)强制熄灭
-//灯效驱动删掉后 PA8 浮空, 灯珠锁存着最后一帧一直亮, 所以这里主动拉低
-//DIN 低电平超过复位时间(>=280us)就清内部锁存全灭, 比发全0帧稳: 5V供电下高阈值约
-//0.7*VDD=3.5V, 3.3V 根本够不上, 发帧那套早前就是这么失败的
-static void WS2812_ForceOff(void)
-{
-	GPIO_InitTypeDef gpio={0};
-
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA,ENABLE);
-	gpio.GPIO_Pin=GPIO_Pin_8;
-	gpio.GPIO_Mode=GPIO_Mode_Out_PP;	//推挽才有确定低电平, 开漏要外部上拉
-	gpio.GPIO_Speed=GPIO_Speed_2MHz;
-	GPIO_Init(GPIOA,&gpio);
-	GPIO_ResetBits(GPIOA,GPIO_Pin_8);	//拉住不放, 后面没人再动它
-}
-
-//主循环 10ms 一帧: 扫描 -> 空闲熄屏 -> 菜单 -> 游戏模式走USB / 蓝牙模式走串口
+//主循环 10ms 一帧
 int main(void)
 {
 	uint16_t axis[ADC_CH_NUM];
 	uint16_t btn_bitmap;
 
-	//USB 初始化, 时钟已由 SystemInit 配成 72MHz, USB = PLL/1.5 = 48MHz
+	//USB 初始化(48MHz)
 	Set_System();
 	USB_Interrupts_Config();
 	Set_USBClock();
@@ -41,9 +25,8 @@ int main(void)
 
 	MY_USART1_Init(115200);	 //串口1 接 HC-05/06 蓝牙模块
 	MY_Joystick_Init();
-	WS2812_ForceOff();	 //趁早关灯, 免得开机那 800ms 灯珠乱亮
 
-	//等 OLED 上电稳定再探地址: 有些模块是 0x7A 不是 0x78
+	//延时等 OLED 上电稳定
 	delay_ms(800);
 	{
 		uint8_t ack78, ack7A;
@@ -78,7 +61,7 @@ int main(void)
 		{
 			Joystick_Scan();
 
-			//空闲熄屏: 无活动超过设定秒数则关显示省电
+			//空闲熄屏
 			{
 				uint8_t active = Joystick_IsActive();
 				if (active)
@@ -111,7 +94,7 @@ int main(void)
 
 			if (Menu_GetMode() == MODE_GAME)
 			{
-				//游戏模式: USB HID, 枚举完成且上一帧发送完毕才发
+				//游戏模式发 HID
 				if ((bDeviceState == CONFIGURED) && PrevXferComplete)
 				{
 					Joystick_Send();

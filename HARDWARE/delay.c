@@ -2,7 +2,7 @@
 
 #include "delay.h"
 
-//毫秒延时: 重装载法, 每次重填 LOAD 然后等 COUNTFLAG
+//毫秒延时: 重装载法
 void delay_ms(uint32_t ms)
 {
 	while(ms--)
@@ -16,8 +16,7 @@ void delay_ms(uint32_t ms)
 	}
 }
 
-//微秒延时: 最大 233016us(SysTick 只有 24bit), 超了自动钳位
-//以前 LOAD 直接填 0xFFFFFFFF, 实测会卡出 0.23s, 这里专门封顶
+//微秒延时: 上限 233016us(24bit), 超出钳位
 void delay_us(uint32_t us)
 {
 	if(us==0)return;

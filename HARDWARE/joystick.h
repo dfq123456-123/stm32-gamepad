@@ -1,5 +1,5 @@
 //joystick.h - 游戏手柄采集核心
-//15 键(键号 1~15, 1基, = HID 位序), 6 路 ADC, 自适应量程 + 动态校准
+//15 键(1基) + 6 路 ADC, 自适应量程
 #ifndef __JOYSTICK_H
 #define __JOYSTICK_H
 

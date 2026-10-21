@@ -1,20 +1,20 @@
-//flash_save.h - 参数断电保存(STM32F103 内部 Flash 最后一页)
-//STM32F103C8: 64KB Flash, 页大小 1KB。最后一页(page 63, 0x0800FC00~0x0800FFFF)
+//flash_save.h - 参数断电保存(片内 Flash 末页)
+//STM32F103C8: 64KB Flash, 页 1KB, 用末页 0x0800FC00
 #ifndef __FLASH_SAVE_H
 #define __FLASH_SAVE_H
 
 #include <stdint.h>
 
 	//参数结构体(断电保存的字段, 改结构时递增 VERSION 让旧数据失效自动回默认)
-#define PARAM_VERSION  2u	//v2: deadzone 由 uint8_t 升 uint16_t, 旧 v1 数据自动失效
+#define PARAM_VERSION  2u	//v2: deadzone 改 uint16_t
 
 typedef struct
 {
 	uint8_t  version;	//结构版本号, 与 PARAM_VERSION 不符视为无效
-	uint16_t deadzone;	//摇杆死区(0~512, 需 uint16 否则 >255 被截断)
+	uint16_t deadzone;	//摇杆死区 0~512
 	uint8_t  filter;	//滤波强度
 	uint8_t  brightness;	//OLED 对比度
-	uint8_t  idle_idx;	//熄屏选项索引(0=关 1=3s 2=5s 3=10s 4=30s, 见 menu.c idle_secs)
+	uint8_t  idle_idx;	//熄屏索引 0=关 1=3s 2=5s 3=10s 4=30s
 	uint8_t  mode;	//工作模式(0=游戏 1=蓝牙)
 	uint8_t  bt_header;	//蓝牙包头
 	uint8_t  bt_tail;	//蓝牙包尾

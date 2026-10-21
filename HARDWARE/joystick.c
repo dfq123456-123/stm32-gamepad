@@ -29,7 +29,7 @@ static KEY_T key_tbl[KEY_NUM] =
 	{GPIOB, GPIO_Pin_14, KEY_RB,    0, 0},	 //15 RB    PB14
 };
 
-//十字键走 Hat Switch(POV), 不占按钮位图, 否则 Steam 绑定时会把"按钮1(十字键上)"误当 A
+//十字键只走 Hat Switch, 不占按钮位图
 static const uint8_t report_btn_bit[KEY_NUM + 1] =
 {
 	0,	 //索引0未用
@@ -62,14 +62,14 @@ static uint16_t joy_deadzone = JOY_DEADZONE_DEFAULT;
 static uint8_t  joy_filter  = JOY_FILTER_DEFAULT;
 static uint8_t  stable_cnt = 0;	 //动态校准静止计数
 
-//按键 GPIO 上拉输入 + ADC 初始化, 顺便关 JTAG 放出 PB3/PB4
+//按键 GPIO + ADC 初始化
 void MY_Joystick_Init(void)
 {
 	GPIO_InitTypeDef GPIO_InitStructure;
 	uint8_t i;
 
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO, ENABLE);
-	//禁用 JTAG 释放 PB3/PB4, 保留 SWD 可继续烧录
+	//关 JTAG 释放 PB3/PB4, 保留 SWD
 	GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
 
 	GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_IPU;
@@ -81,16 +81,15 @@ void MY_Joystick_Init(void)
 	}
 
 	MY_ADC_Init();
-	//校准由 main 在 OLED 就绪后调 Joystick_Calibrate_Ex, 此处不内部校准避免重复
+	//校准在 main 里 OLED 就绪后做
 }
 
-//校准, 不带进度回调
 void Joystick_Calibrate(void)
 {
 	Joystick_Calibrate_Ex(0);
 }
 
-//连采 JOY_CAL_NUM 次取均值当中心, 顺便重置自适应量程; cb 用来报进度
+//连采 JOY_CAL_NUM 次取均值作中心
 void Joystick_Calibrate_Ex(Joystick_CalProgressCB cb)
 {
 	uint8_t  ch, i;
@@ -120,7 +119,7 @@ void Joystick_Calibrate_Ex(Joystick_CalProgressCB cb)
 	}
 }
 
-//一阶低通: val = (val*(2^n-1) + raw) >> n, n=0 直通
+//一阶低通: val=(val*(2^n-1)+raw)>>n
 static uint16_t lowpass(uint16_t val, uint16_t raw, uint8_t n)
 {
 	if (n == 0)
@@ -130,20 +129,20 @@ static uint16_t lowpass(uint16_t val, uint16_t raw, uint8_t n)
 	return (uint16_t)(((uint32_t)val * ((1u << n) - 1) + raw) >> n);
 }
 
-//一帧扫描(10ms 一次): 按键消抖 -> 读 6 路 ADC -> 滤波死区 -> 动态零漂 -> 组位图
+//单帧扫描: 按键消抖 -> ADC -> 滤波死区 -> 零漂 -> 位图
 void Joystick_Scan(void)
 {
 	uint8_t i, ch, level;
 	uint8_t any_pressed = 0;
 	uint8_t all_stable  = 1;
 
-	//先存上一帧状态供 Joystick_KeyPressed 做边沿检测, 放在 state 更新之前否则恒假
+	//存上一帧状态供边沿检测
 	for (i = 0; i < KEY_NUM; i++)
 	{
 		prev_state[i] = key_tbl[i].state;
 	}
 
-	//消抖: 电平连续 5 帧相同才翻转(加强以滤十字键接触抖动)
+	//消抖: 连续 5 帧相同才翻转
 	for (i = 0; i < KEY_NUM; i++)
 	{
 		level = (GPIO_ReadInputDataBit(key_tbl[i].port, key_tbl[i].pin) == Bit_RESET) ? 1 : 0;
@@ -176,8 +175,8 @@ void Joystick_Scan(void)
 
 	for (ch = 0; ch < ADC_CH_NUM; ch++)
 	{
-		//滤波强度自适应: 偏差越大说明在动, 用轻滤波跟手
-		//阈值卡在串扰(20-40 LSB)之上、真推杆(>100)之下
+		//滤波强度自适应
+		//阈值: 串扰 20-40, 推杆 >100
 		int32_t  vdelta = (int32_t)joy_raw[ch] - (int32_t)joy_val[ch];
 		uint8_t  fn = (vdelta > 120 || vdelta < -120) ? 1u :
 					 (vdelta > 60  || vdelta < -60)  ? 1u :
@@ -185,7 +184,7 @@ void Joystick_Scan(void)
 		uint16_t f = lowpass(joy_val[ch], joy_raw[ch], fn);
 		int16_t diff = (int16_t)f - (int16_t)joy_center[ch];
 
-		//死区归零: |Δ| < 死区 -> 回中心, 摇杆4轴+扳机2轴都做
+		//死区归零, 6 轴都做
 		if (diff > -((int16_t)joy_deadzone) && diff < (int16_t)joy_deadzone)
 		{
 			f = joy_center[ch];
@@ -199,7 +198,7 @@ void Joystick_Scan(void)
 		}
 	}
 
-	//动态零漂消除: 全通道静止(偏差≤4)且无按键 -> 平滑收敛中心
+	//零漂消除: 全静止时收敛中心
 	if (all_stable && !any_pressed)
 	{
 		if (++stable_cnt >= 50)	 //连续 50 帧(~0.5s)静止才更新
@@ -216,7 +215,7 @@ void Joystick_Scan(void)
 		stable_cnt = 0;
 	}
 
-	//按键位图按 XInput 标准序重映射
+	//按 XInput 序重排位图
 	btn_bitmap = 0;
 	for (i = 0; i < KEY_NUM; i++)
 	{
@@ -228,7 +227,7 @@ void Joystick_Scan(void)
 	}
 }
 
-//取某个键的确认状态, 1=按下
+//取键状态, 1=按下
 uint8_t Joystick_GetKey(uint8_t key_id)
 {
 	uint8_t i;
@@ -246,13 +245,13 @@ uint8_t Joystick_GetKey(uint8_t key_id)
 	return 0;
 }
 
-//取按 XInput 序重排过的按键位图
+//取按键位图
 uint16_t Joystick_GetBtnBitmap(void)
 {
 	return btn_bitmap;
 }
 
-//取按下沿: 这一帧按下且上一帧没按
+//取按下沿
 uint8_t Joystick_KeyPressed(uint8_t key_id)
 {
 	uint8_t i;
@@ -270,7 +269,7 @@ uint8_t Joystick_KeyPressed(uint8_t key_id)
 	return 0;
 }
 
-//实际半量程(中心到观测极值), 下限 256 防止量程未探明时过度放大
+//半量程(中心到极值), 下限 256
 static int32_t joy_half_range(uint8_t ch)
 {
 	int32_t lo = (int32_t)joy_center[ch] - (int32_t)ax_lo[ch];
@@ -281,7 +280,7 @@ static int32_t joy_half_range(uint8_t ch)
 	return half;
 }
 
-//摇杆轴 -> HID 字节(128 中心), 自适应量程归一化, 满推必到 ±127
+//摇杆轴 -> HID 字节, 128 中心
 static uint8_t axis_to_hid(uint8_t ch)
 {
 	int32_t d = (int32_t)joy_val[ch] - (int32_t)joy_center[ch];
@@ -291,7 +290,7 @@ static uint8_t axis_to_hid(uint8_t ch)
 	return (uint8_t)(v + 0x80);
 }
 
-//扳机轴 -> HID 字节: 0=松开 255=按到底, 自适应量程满按必到 255
+//扳机轴 -> HID 字节, 0=松开 255=到底
 static uint8_t trigger_to_hid(uint8_t ch)
 {
 	int32_t v = (int32_t)Joystick_GetNormAbs(ch);	 //0~1024
@@ -301,7 +300,7 @@ static uint8_t trigger_to_hid(uint8_t ch)
 	return (uint8_t)v;
 }
 
-//USB HID 9 字节报告, DirectInput 标准格式 + 独立双扳机
+//USB HID 9 字节报告
 //[0]按键bit0~7 [1]bit8~10 [2]Hat [3][4]左杆XY [5]LT [6]右杆X [7]右杆Y [8]RT
 void Joystick_GetHIDReport(uint8_t *buf)
 {
@@ -310,14 +309,14 @@ void Joystick_GetHIDReport(uint8_t *buf)
 	buf[0] = (uint8_t)(btn_bitmap & 0xFF);
 	buf[1] = (uint8_t)((btn_bitmap >> 8) & 0xFF);
 
-	//Hat Switch 直接读键真实状态, 不受按钮重映射影响
+	//Hat 读键真实状态
 	{
 		uint8_t up    = Joystick_GetKey(KEY_UP);
 		uint8_t down  = Joystick_GetKey(KEY_DOWN);
 		uint8_t right = Joystick_GetKey(KEY_RIGHT);
 		uint8_t left  = Joystick_GetKey(KEY_LEFT);
 
-		//标准 Hat 编码: 顺时针, 0=北/上, 8=Null
+		//Hat: 0=上 顺时针, 8=Null
 		if (up && right)        dpad = 1;
 		else if (right && down) dpad = 3;
 		else if (down && left)  dpad = 5;
@@ -334,7 +333,7 @@ void Joystick_GetHIDReport(uint8_t *buf)
 	buf[4] = axis_to_hid(AXIS_CH_LY);
 	buf[6] = axis_to_hid(AXIS_CH_RX);
 
-	//右摇杆 Y 物理方向相反: 0x80 - v
+	//右Y反向
 	{
 		int32_t d = (int32_t)joy_val[AXIS_CH_RY] - (int32_t)joy_center[AXIS_CH_RY];
 		int32_t v = d * 127 / joy_half_range(AXIS_CH_RY);
@@ -347,7 +346,7 @@ void Joystick_GetHIDReport(uint8_t *buf)
 	buf[8] = trigger_to_hid(ADC_CH_RT);	 //Rz = 右扳机
 }
 
-//给蓝牙/界面用的打包接口: 6 路轴值 + 位图(十字键额外塞进 bit11~14)
+//打包接口: 6 轴值 + 位图
 void Joystick_GetProcessed(uint16_t axis[6], uint16_t *bm)
 {
 	uint8_t ch;
@@ -406,7 +405,7 @@ uint16_t Joystick_GetAxis(uint8_t ch)
 	return 0;
 }
 
-//取当前中心值(动态校准会漂)
+//取中心值
 uint16_t Joystick_GetCenter(uint8_t ch)
 {
 	if (ch < ADC_CH_NUM)
@@ -416,7 +415,7 @@ uint16_t Joystick_GetCenter(uint8_t ch)
 	return 0;
 }
 
-//取原始 ADC 值(未滤波)
+//取原始 ADC 值
 uint16_t Joystick_GetRaw(uint8_t ch)
 {
 	if (ch < ADC_CH_NUM)
@@ -426,7 +425,7 @@ uint16_t Joystick_GetRaw(uint8_t ch)
 	return 0;
 }
 
-//自适应归一化: (raw-center)/半量程*1024, 满推=±1024
+//归一化: (raw-center)/半量程*1024
 int16_t Joystick_GetNormRaw(uint8_t ch)
 {
 	int32_t d = (int32_t)joy_raw[ch] - (int32_t)joy_center[ch];
@@ -437,7 +436,7 @@ int16_t Joystick_GetNormRaw(uint8_t ch)
 	return (int16_t)v;
 }
 
-//滤波后归一化(±1024): 死区内 joy_val 被钳到中心 -> 归零, 消除像素级抖动
+//滤波后归一化 ±1024
 int16_t Joystick_GetNorm(uint8_t ch)
 {
 	int32_t d = (int32_t)joy_val[ch] - (int32_t)joy_center[ch];
@@ -448,14 +447,14 @@ int16_t Joystick_GetNorm(uint8_t ch)
 	return (int16_t)v;
 }
 
-//归一化取绝对值, 0~1024, 扳机专用
+//归一化绝对值 0~1024, 扳机用
 int16_t Joystick_GetNormAbs(uint8_t ch)
 {
 	int16_t v = Joystick_GetNorm(ch);
 	return v < 0 ? (int16_t)-v : v;
 }
 
-//死区归一化(供测试界面画死区圈): 死区/半量程*1024
+//死区归一化, 画死区圈用
 int16_t Joystick_GetDeadzoneNorm(uint8_t ch)
 {
 	int32_t v = (int32_t)joy_deadzone * 1024 / joy_half_range(ch);
@@ -464,7 +463,7 @@ int16_t Joystick_GetDeadzoneNorm(uint8_t ch)
 	return (int16_t)v;
 }
 
-//是否有活动(供空闲熄屏): 任意键按下 或 任意轴归一化|v|>128(~12.5%行程)
+//是否有活动, 供熄屏判断
 uint8_t Joystick_IsActive(void)
 {
 	uint8_t i, ch;

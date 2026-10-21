@@ -1,4 +1,4 @@
-//oled.h - SSD1306 128x64 OLED 驱动(软件 I2C, SCL=PB12 SDA=PB13)
+//oled.h - SSD1306 128x64, 软件 I2C(PB12=SCL, PB13=SDA)
 #ifndef __OLED_H
 #define __OLED_H
 

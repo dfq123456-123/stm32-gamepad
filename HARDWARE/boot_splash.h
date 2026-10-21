@@ -1,5 +1,5 @@
 //boot_splash.h - 开机动画(头像 + "肚子隆起来了" + 名字水印)
-//数据见 boot_splash_data.c(由 tools/gen_splash_data.py 自动生成):
+//数据见 boot_splash_data.c:
 #ifndef __BOOT_SPLASH_H
 #define __BOOT_SPLASH_H
 
